@@ -175,7 +175,7 @@ class ExploreFragment :
 					menu.findItem(R.id.action_disable)?.isVisible = !viewModel.isAllSourcesEnabled.value &&
 				selectedSources.all { it.mangaSource is MangaParserSource || it.mangaSource is MihonMangaSource }
 
-		menu.findItem(R.id.action_delete)?.isVisible = selectedSources.all { it.mangaSource is ExternalMangaSource }
+		menu.findItem(R.id.action_delete)?.isVisible = selectedSources.all { it.mangaSource is ExternalMangaSource || it.mangaSource is MihonMangaSource }
 		return super.onPrepareActionMode(controller, mode, menu)
 	}
 
@@ -199,6 +199,7 @@ class ExploreFragment :
 			R.id.action_delete -> {
 				selectedSources.forEach {
 					(it.mangaSource as? ExternalMangaSource)?.let { uninstallExternalSource(it) }
+					(it.mangaSource as? MihonMangaSource)?.let { uninstallMihonSource(it) }
 				}
 				mode?.finish()
 			}
@@ -260,5 +261,19 @@ class ExploreFragment :
 			Intent.ACTION_UNINSTALL_PACKAGE
 		}
 		context?.startActivity(Intent(action, uri))
+	}
+
+	private fun uninstallMihonSource(source: MihonMangaSource) {
+		org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.uninstallPrivateExtension(requireContext(), source.packageName)
+		val uri = Uri.fromParts("package", source.packageName, null)
+		val action = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+			Intent.ACTION_DELETE
+		} else {
+			@Suppress("DEPRECATION")
+			Intent.ACTION_UNINSTALL_PACKAGE
+		}
+		runCatching {
+			context?.startActivity(Intent(action, uri))
+		}
 	}
 }

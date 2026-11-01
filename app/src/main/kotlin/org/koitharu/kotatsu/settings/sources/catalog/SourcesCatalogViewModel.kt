@@ -108,16 +108,21 @@ class SourcesCatalogViewModel @Inject constructor(
 
 	fun addSource(source: MangaSource) {
 		launchJob(Dispatchers.Default) {
-			val rollback = repository.setSourcesEnabled(setOf(source), true)
-			onActionDone.call(ReversibleAction(R.string.source_enabled, rollback))
+			repository.setSourcesEnabled(setOf(source), true)
+			val rollback = repository.setIsPinned(setOf(source), true)
+			onActionDone.call(ReversibleAction(R.string.source_pinned, rollback))
 		}
 	}
 
 	fun removeSource(source: MangaSource) {
 		launchJob(Dispatchers.Default) {
-			val rollback = repository.setSourcesEnabled(setOf(source), false)
-			onActionDone.call(ReversibleAction(R.string.source_disabled, rollback))
+			val rollback = repository.setIsPinned(setOf(source), false)
+			onActionDone.call(ReversibleAction(R.string.source_unpinned, rollback))
 		}
+	}
+
+	fun findCatalogEntry(packageName: String): ExtensionSourceCatalogEntry? {
+		return extensionCatalog.entries.value.find { it.packageName == packageName }
 	}
 
 	fun setContentType(value: ContentType, isAdd: Boolean) {
@@ -194,7 +199,7 @@ class SourcesCatalogViewModel @Inject constructor(
 			.map { source ->
 				SourceCatalogItem.Source(
 					source = source,
-					isEnabled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isEnabled(context, source),
+					isPinned = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isPinned(context, source),
 				)
 			}
 			.toList()
@@ -210,8 +215,8 @@ class SourcesCatalogViewModel @Inject constructor(
 			.sortedWith(compareBy({ extensionLanguageSortKey(it.language) }, { it.sourceName.lowercase() }, { it.extensionName.lowercase() }))
 			.map { entry ->
 				val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.isPackageInstalled(entry.packageName)
-				val isEnabled = if (isInstalled) {
-					org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isPackageEnabled(context, entry.packageName)
+				val isPinned = if (isInstalled) {
+					org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isPackagePinned(context, entry.packageName)
 				} else {
 					false
 				}
@@ -226,11 +231,17 @@ class SourcesCatalogViewModel @Inject constructor(
 					iconUrl = entry.iconUrl,
 					isInstalling = entry.packageName in installing,
 					isInstalled = isInstalled,
-					isEnabled = isEnabled,
+					isPinned = isPinned,
 				)
 			}
 			.toList()
-		val nativeItems = sources.map { SourceCatalogItem.Source(source = it, isEnabled = false) }
+		val nativePinnedSources = repository.getPinnedSources()
+		val nativeItems = sources.map { 
+			SourceCatalogItem.Source(
+				source = it, 
+				isPinned = it in nativePinnedSources,
+			) 
+		}
 		val items = runtimeItems + nativeItems + extensionItems
 			return if (items.isEmpty()) {
 

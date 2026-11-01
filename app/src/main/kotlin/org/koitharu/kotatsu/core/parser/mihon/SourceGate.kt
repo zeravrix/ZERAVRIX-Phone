@@ -22,7 +22,8 @@ object SourceGate {
     private val lastRequestTimes = ConcurrentHashMap<Long, Long>()
 
     private fun getSemaphore(sourceId: Long): Semaphore =
-        semaphores.getOrPut(sourceId) { Semaphore(MAX_CONCURRENT_REQUESTS) }
+        if (sourceId <= 0L) Semaphore(MAX_CONCURRENT_REQUESTS)
+        else semaphores.getOrPut(sourceId) { Semaphore(MAX_CONCURRENT_REQUESTS) }
 
     suspend fun <T> execute(sourceId: Long, initialDelayMs: Long = 1000L, block: suspend () -> T): T {
         val semaphore = getSemaphore(sourceId)

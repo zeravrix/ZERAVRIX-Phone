@@ -36,6 +36,7 @@ import org.zeravrix.kotatsu.databinding.ActivitySourcesCatalogBinding
 import org.zeravrix.kotatsu.list.ui.adapter.TypedListSpacingDecoration
 import org.zeravrix.kotatsu.main.ui.owners.AppBarOwner
 import org.koitharu.kotatsu.parsers.model.ContentType
+import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
 
 @AndroidEntryPoint
 class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
@@ -96,7 +97,7 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 					val installedSource = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
 						.find { it.packageName == item.packageName }
 					if (installedSource != null) {
-						if (item.isEnabled) {
+						if (item.isPinned) {
 							viewModel.removeSource(installedSource)
 						} else {
 							viewModel.addSource(installedSource)
@@ -108,7 +109,7 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 							val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
 							val src = refreshed.find { it.packageName == item.packageName }
 							if (src != null) {
-								if (item.isEnabled) {
+								if (item.isPinned) {
 									viewModel.removeSource(src)
 								} else {
 									viewModel.addSource(src)
@@ -167,11 +168,48 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 	}
 
 	override fun onItemClick(item: SourceCatalogItem.Source, view: View) {
+		val source = item.source
+		if (source is MihonMangaSource) {
+			val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.isPackageInstalled(source.packageName)
+			if (!isInstalled) {
+				showInstallSourcePrompt(source.sourceName, source.packageName)
+				return
+			}
+		}
 		router.openList(item.source, null, null)
 	}
 
+	private fun showInstallSourcePrompt(sourceName: String, packageName: String) {
+		com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+			.setTitle(getString(R.string.install_extension_apk))
+			.setMessage(getString(R.string.downloading_extension, sourceName) + "\n" + getString(R.string.source_extensions_summary))
+			.setPositiveButton(R.string.install) { _, _ ->
+				val catalogEntry = viewModel.findCatalogEntry(packageName)
+				if (catalogEntry != null) {
+					installExtension(
+						SourceCatalogItem.Extension(
+							sourceName = catalogEntry.sourceName,
+							language = catalogEntry.language,
+							extensionName = catalogEntry.extensionName,
+							packageName = catalogEntry.packageName,
+							versionName = catalogEntry.versionName,
+							apkUrl = catalogEntry.apkUrl,
+							iconUrl = catalogEntry.iconUrl,
+							isInstalled = false,
+							isInstalling = false,
+							isPinned = false,
+						)
+					)
+				} else {
+					openExtensionManager()
+				}
+			}
+			.setNegativeButton(android.R.string.cancel, null)
+			.show()
+	}
+
 	override fun onItemLongClick(item: SourceCatalogItem.Source, view: View): Boolean {
-		if (item.isEnabled) {
+		if (item.isPinned) {
 			viewModel.removeSource(item.source)
 		} else {
 			viewModel.addSource(item.source)
@@ -184,26 +222,33 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 		}
 
 		private fun installExtension(item: SourceCatalogItem.Extension) {
-			android.widget.Toast.makeText(
-				this,
-				"${getString(R.string.download)}: ${item.sourceName}",
-				android.widget.Toast.LENGTH_SHORT,
-			).show()
-			viewModel.installExtension(item) { success ->
-				if (success) {
+			com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+				.setTitle(getString(R.string.install_extension_apk))
+				.setMessage(getString(R.string.downloading_extension, item.sourceName) + "\n" + getString(R.string.source_extensions_summary))
+				.setPositiveButton(R.string.install) { _, _ ->
 					android.widget.Toast.makeText(
 						this,
-						"${item.sourceName} installed successfully!",
+						"${getString(R.string.download)}: ${item.sourceName}",
 						android.widget.Toast.LENGTH_SHORT,
 					).show()
-				} else {
-					android.widget.Toast.makeText(
-						this,
-						"Installation failed. Please check network connection.",
-						android.widget.Toast.LENGTH_SHORT,
-					).show()
+					viewModel.installExtension(item) { success ->
+						if (success) {
+							android.widget.Toast.makeText(
+								this,
+								"${item.sourceName} installed successfully!",
+								android.widget.Toast.LENGTH_SHORT,
+							).show()
+						} else {
+							android.widget.Toast.makeText(
+								this,
+								"Installation failed. Please check network connection.",
+								android.widget.Toast.LENGTH_SHORT,
+							).show()
+						}
+					}
 				}
-			}
+				.setNegativeButton(android.R.string.cancel, null)
+				.show()
 		}
 
 	override fun onMenuItemActionExpand(item: MenuItem): Boolean {

@@ -43,6 +43,7 @@ import org.zeravrix.kotatsu.list.ui.model.toErrorFooter
 import org.zeravrix.kotatsu.list.ui.model.toErrorState
 import org.zeravrix.kotatsu.local.data.LocalStorageChanges
 import org.zeravrix.kotatsu.local.domain.model.LocalManga
+import org.zeravrix.kotatsu.extension.model.SourceNotInstalledException
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.util.sizeOrZero
@@ -67,6 +68,7 @@ open class RemoteListViewModel @Inject constructor(
 	val isRandomLoading = MutableStateFlow(false)
 	val onOpenManga = MutableEventFlow<Manga>()
     val onSourceBroken = MutableEventFlow<Unit>()
+    val onSourceNotInstalled = MutableEventFlow<SourceNotInstalledException>()
 
 	protected val repository = mangaRepositoryFactory.create(source)
 	private val mangaList = MutableStateFlow<List<Manga>?>(null)
@@ -165,6 +167,11 @@ open class RemoteListViewModel @Inject constructor(
 				}
 			} catch (e: CancellationException) {
 				throw e
+			} catch (e: SourceNotInstalledException) {
+				e.printStackTraceDebug()
+				listError.value = e
+				onSourceNotInstalled.call(e)
+				hasNextPage.value = false
 			} catch (e: Throwable) {
 				e.printStackTraceDebug()
 				listError.value = e

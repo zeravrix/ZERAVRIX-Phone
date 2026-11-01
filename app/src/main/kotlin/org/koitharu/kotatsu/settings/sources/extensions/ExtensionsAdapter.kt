@@ -1,6 +1,7 @@
 package org.zeravrix.kotatsu.settings.sources.extensions
 
 import android.content.Context
+import android.view.View
 import org.zeravrix.kotatsu.core.ui.BaseListAdapter
 import org.zeravrix.kotatsu.core.ui.list.fastscroll.FastScroller
 import org.zeravrix.kotatsu.extension.model.Extension
@@ -12,12 +13,13 @@ import org.zeravrix.kotatsu.list.ui.model.ListModel
 
 class ExtensionsAdapter(
     onItemClick: (Extension) -> Unit,
+    onItemLongClick: (Extension, View) -> Boolean,
     onActionClick: (Extension) -> Unit,
 ) : BaseListAdapter<ListModel>(), FastScroller.SectionIndexer {
 
     init {
         addDelegate(ListItemType.HEADER, listHeaderAD(null))
-        addDelegate(ListItemType.EXPLORE_SOURCE_LIST, extensionItemAD(onItemClick, onActionClick))
+        addDelegate(ListItemType.EXPLORE_SOURCE_LIST, extensionItemAD(onItemClick, onItemLongClick, onActionClick))
         addDelegate(ListItemType.STATE_LOADING, loadingStateAD())
     }
 

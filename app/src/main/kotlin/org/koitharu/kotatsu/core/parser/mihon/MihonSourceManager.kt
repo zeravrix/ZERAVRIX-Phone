@@ -92,8 +92,10 @@ object MihonSourceManager {
                         installedPackageNames.add(file.name.removeSuffix(".ext"))
                     }
                 }
+                mgr.awaitInitialization()
                 mgr.getLoadedExtensions().forEach { installedPackageNames.add(it.pkgName) }
                 mgr.getNotLoadedExtensions().forEach { installedPackageNames.add(it.pkgName) }
+                updateLoadedSources(mgr.getLoadedExtensions())
             }
 
             // Listen to loaded extensions from the ExtensionManager
@@ -191,17 +193,19 @@ object MihonSourceManager {
 
     suspend fun getLoadedOrAwait(context: Context, descriptor: MihonMangaSource): LoadedMihonSource {
         initialize(context)
-        if (!_isInitialized.value) {
-            awaitInitialization()
-        }
+        awaitInitialization()
         loadedSourcesMap[descriptor.name]?.let { return it }
-        loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        if (descriptor.sourceId != 0L) {
+            loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        }
         loadedSourcesMap.values.find { it.descriptor.packageName == descriptor.packageName }?.let { return it }
 
         // Attempt refresh if not present
         refreshNow(context)
         loadedSourcesMap[descriptor.name]?.let { return it }
-        loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        if (descriptor.sourceId != 0L) {
+            loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        }
         loadedSourcesMap.values.find { it.descriptor.packageName == descriptor.packageName }?.let { return it }
 
         return get(descriptor)
@@ -218,18 +222,16 @@ object MihonSourceManager {
         }
         loadedSourcesMap.values.find { it.descriptor.packageName == descriptor.packageName }?.let { return it }
 
-        return stubSourcesMap.getOrPut(descriptor.name) {
-            val stub = StubSource(
-                id = descriptor.sourceId,
-                lang = descriptor.language,
-                name = descriptor.sourceName,
-            )
-            LoadedMihonSource(
-                descriptor = descriptor,
-                source = stub,
-                classLoader = javaClass.classLoader!!,
-            )
-        }
+        val stub = StubSource(
+            id = descriptor.sourceId,
+            lang = descriptor.language,
+            name = descriptor.sourceName,
+        )
+        return LoadedMihonSource(
+            descriptor = descriptor,
+            source = stub,
+            classLoader = javaClass.classLoader!!,
+        )
     }
 
     fun getAllLoaded(): List<LoadedMihonSource> = loadedSourcesMap.values.toList()

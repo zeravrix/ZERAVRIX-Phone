@@ -10,7 +10,7 @@ sealed interface SourceCatalogItem : ListModel {
 
 	data class Source(
 		val source: MangaSource,
-		val isEnabled: Boolean = false,
+		val isPinned: Boolean = false,
 	) : SourceCatalogItem {
 
 		override fun areItemsTheSame(other: ListModel): Boolean {
@@ -29,7 +29,7 @@ sealed interface SourceCatalogItem : ListModel {
 		val iconUrl: String = "",
 		val isInstalling: Boolean = false,
 		val isInstalled: Boolean = false,
-		val isEnabled: Boolean = false,
+		val isPinned: Boolean = false,
 	) : SourceCatalogItem {
 
 		override fun areItemsTheSame(other: ListModel): Boolean {

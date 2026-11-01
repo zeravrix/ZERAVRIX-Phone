@@ -13,12 +13,17 @@ import org.zeravrix.kotatsu.list.ui.model.ListModel
 
 fun extensionItemAD(
     onItemClick: (Extension) -> Unit,
+    onItemLongClick: (Extension, android.view.View) -> Boolean,
     onActionClick: (Extension) -> Unit,
 ) = adapterDelegateViewBinding<ExtensionItemModel, ListModel, ItemExtensionBinding>(
     { inflater, parent -> ItemExtensionBinding.inflate(inflater, parent, false) },
 ) {
     binding.root.setOnClickListener {
         onItemClick(item.extension)
+    }
+
+    binding.root.setOnLongClickListener { v ->
+        onItemLongClick(item.extension, v)
     }
 
     binding.buttonAction.setOnClickListener {

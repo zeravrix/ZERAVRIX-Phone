@@ -44,7 +44,7 @@ fun sourceCatalogItemSourceAD(
 	bind {
 		binding.progressBarDownload.isVisible = false
 		binding.imageViewAdd.isVisible = true
-		if (item.isEnabled) {
+		if (item.isPinned) {
 			binding.imageViewAdd.setImageResource(R.drawable.ic_remove)
 			binding.imageViewAdd.contentDescription = context.getString(R.string.remove)
 		} else {
@@ -101,7 +101,7 @@ fun sourceCatalogItemExtensionAD(
 			binding.progressBarDownload.isVisible = false
 			binding.imageViewAdd.isVisible = true
 			if (item.isInstalled) {
-				if (item.isEnabled) {
+				if (item.isPinned) {
 					binding.imageViewAdd.setImageResource(R.drawable.ic_remove)
 					binding.imageViewAdd.contentDescription = context.getString(R.string.remove)
 				} else {

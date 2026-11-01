@@ -43,6 +43,20 @@ class RemoteListFragment : MangaListFragment(), FilterCoordinator.Owner, View.On
         viewModel.isRandomLoading.observe(viewLifecycleOwner, MenuInvalidator(requireActivity()))
         viewModel.onOpenManga.observeEvent(viewLifecycleOwner) { router.openDetails(it) }
         viewModel.onSourceBroken.observeEvent(viewLifecycleOwner) { showSourceBrokenWarning() }
+        viewModel.onSourceNotInstalled.observeEvent(viewLifecycleOwner) { ex ->
+            com.google.android.material.dialog.MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.install_extension_apk)
+                .setMessage(getString(R.string.downloading_extension, ex.sourceName) + "\n" + getString(R.string.source_extensions_summary))
+                .setPositiveButton(R.string.install) { _, _ ->
+                    router.openSourcesCatalog()
+                    activity?.finish()
+                }
+                .setNegativeButton(android.R.string.cancel) { _, _ ->
+                    activity?.finish()
+                }
+                .setCancelable(true)
+                .show()
+        }
         filterCoordinator.observe().distinctUntilChangedBy { it.listFilter.isEmpty() }
             .drop(1)
             .observe(viewLifecycleOwner) {

@@ -34,27 +34,30 @@ data class MihonMangaSource(
 
         fun fromKey(key: String): MihonMangaSource? {
             if (!key.startsWith("mihon:")) return null
-            metadata[key]?.let { return it }
             val parts = key.removePrefix("mihon:").split(':', limit = 2)
             if (parts.size != 2) return null
             val pkg = parts[0]
             val parsedId = parts[1].toLongOrNull() ?: return null
 
-            // Check if we have a known loaded source for this package
-            val byPkg = MihonSourceManager.sources.value.find { it.packageName == pkg }
-                ?: packageToSource[pkg]
+            // Prioritize finding a loaded source with real non-zero ID
+            val byPkg = MihonSourceManager.sources.value.find { it.packageName == pkg && it.sourceId != 0L }
+                ?: packageToSource[pkg]?.takeIf { it.sourceId != 0L }
                 ?: metadata.values.find { it.packageName == pkg && it.sourceId != 0L }
 
-            if (byPkg != null && (parsedId == 0L || parsedId == byPkg.sourceId)) {
+            if (byPkg != null) {
                 return byPkg
+            }
+
+            if (parsedId != 0L) {
+                metadata[key]?.let { return it }
             }
 
             return MihonMangaSource(pkg, parsedId)
         }
 
         internal fun remember(source: MihonMangaSource) {
-            metadata[source.name] = source
             if (source.sourceId != 0L) {
+                metadata[source.name] = source
                 packageToSource[source.packageName] = source
             }
         }
@@ -104,10 +107,22 @@ object MihonSourceRuntime {
         return MihonSourceManager.get(descriptor)
     }
 
+    private val iconCache = ConcurrentHashMap<String, Drawable>()
+
+    fun clearIconCache(packageName: String? = null) {
+        if (packageName != null) {
+            iconCache.remove(packageName)
+        } else {
+            iconCache.clear()
+        }
+    }
+
     fun getIcon(context: Context, descriptor: MihonMangaSource): Drawable? =
         getIcon(context, descriptor.packageName)
 
     fun getIcon(context: Context, packageName: String): Drawable? {
+        iconCache[packageName]?.let { return it }
+
         val pkgManager = context.packageManager
         val density = context.resources.displayMetrics.densityDpi
 
@@ -122,10 +137,16 @@ object MihonSourceRuntime {
                 if (appInfo.icon != 0) {
                     val res = runCatching { pkgManager.getResourcesForApplication(appInfo) }.getOrNull()
                     val icon = runCatching { res?.getDrawableForDensity(appInfo.icon, density, null) }.getOrNull()
-                    if (icon != null) return icon
+                    if (icon != null) {
+                        iconCache[packageName] = icon
+                        return icon
+                    }
                 }
                 val fallback = runCatching { appInfo.loadIcon(pkgManager) }.getOrNull()
-                if (fallback != null) return fallback
+                if (fallback != null) {
+                    iconCache[packageName] = fallback
+                    return fallback
+                }
             }
         }
 
@@ -135,9 +156,16 @@ object MihonSourceRuntime {
             if (sharedInfo.icon != 0) {
                 val res = runCatching { pkgManager.getResourcesForApplication(sharedInfo) }.getOrNull()
                 val icon = runCatching { res?.getDrawableForDensity(sharedInfo.icon, density, null) }.getOrNull()
-                if (icon != null) return icon
+                if (icon != null) {
+                    iconCache[packageName] = icon
+                    return icon
+                }
             }
-            return runCatching { sharedInfo.loadIcon(pkgManager) }.getOrNull()
+            val fallback = runCatching { sharedInfo.loadIcon(pkgManager) }.getOrNull()
+            if (fallback != null) {
+                iconCache[packageName] = fallback
+                return fallback
+            }
         }
 
         return null
@@ -188,20 +216,38 @@ object MihonSourceRuntime {
     }
 
     fun isPinned(context: Context, descriptor: MihonMangaSource): Boolean {
+        return isPackagePinned(context, descriptor.packageName, descriptor.name)
+    }
+
+    fun isPackagePinned(context: Context, packageName: String, sourceName: String? = null): Boolean {
         val prefs = preferences(context)
-        val key = pinnedKey(descriptor)
-        if (prefs.contains(key)) return prefs.getBoolean(key, true)
-        val legacyKey = "pinned:${descriptor.name}"
-        if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
-        // Default to TRUE so every installed extension source is pinned in Explore by default
+        if (sourceName != null) {
+            val key = "source_pinned_$sourceName"
+            if (prefs.contains(key)) return prefs.getBoolean(key, true)
+            val legacyKey = "pinned:$sourceName"
+            if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
+        }
+        val pkgKey = "source_pinned_pkg_$packageName"
+        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
         return true
     }
 
     fun setPinned(context: Context, descriptor: MihonMangaSource, pinned: Boolean) {
-        preferences(context).edit()
-            .putBoolean(pinnedKey(descriptor), pinned)
-            .putBoolean("pinned:${descriptor.name}", pinned)
-            .apply()
+        setPackagePinned(context, descriptor.packageName, descriptor.name, pinned)
+    }
+
+    fun setPackagePinned(context: Context, packageName: String, sourceName: String? = null, pinned: Boolean) {
+        val editor = preferences(context).edit()
+            .putBoolean("source_pinned_pkg_$packageName", pinned)
+        if (sourceName != null) {
+            editor.putBoolean("source_pinned_$sourceName", pinned)
+            editor.putBoolean("pinned:$sourceName", pinned)
+        }
+        for (source in MihonSourceManager.sources.value.filter { it.packageName == packageName }) {
+            editor.putBoolean(pinnedKey(source), pinned)
+            editor.putBoolean("pinned:${source.name}", pinned)
+        }
+        editor.apply()
         MihonSourceManager.debounceRefresh()
     }
 

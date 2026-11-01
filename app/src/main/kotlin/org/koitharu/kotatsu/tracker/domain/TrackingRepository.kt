@@ -126,6 +126,7 @@ class TrackingRepository @Inject constructor(
 		db.getTracksDao().gc()
 		db.getTrackLogsDao().run {
 			gc()
+			deleteDuplicates()
 			trim(MAX_LOG_SIZE)
 		}
 	}
@@ -136,13 +137,17 @@ class TrackingRepository @Inject constructor(
 			db.getTracksDao().upsert(track)
 			if (updates is MangaUpdates.Success && updates.isValid && updates.newChapters.isNotEmpty()) {
 				progressUpdateUseCase(updates.manga)
-				val logEntity = TrackLogEntity(
-					mangaId = updates.manga.id,
-					chapters = updates.newChapters.joinToString("\n") { x -> x.name },
-					createdAt = System.currentTimeMillis(),
-					isUnread = true,
-				)
-				db.getTrackLogsDao().insert(logEntity)
+				val newChaptersStr = updates.newChapters.joinToString("\n") { x -> x.name }
+				val latestLog = db.getTrackLogsDao().findLatestByMangaId(updates.manga.id)
+				if (latestLog == null || latestLog.chapters != newChaptersStr) {
+					val logEntity = TrackLogEntity(
+						mangaId = updates.manga.id,
+						chapters = newChaptersStr,
+						createdAt = System.currentTimeMillis(),
+						isUnread = true,
+					)
+					db.getTrackLogsDao().insert(logEntity)
+				}
 			}
 		}
 	}

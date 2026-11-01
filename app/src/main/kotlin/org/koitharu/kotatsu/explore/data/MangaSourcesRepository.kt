@@ -232,11 +232,11 @@ class MangaSourcesRepository @Inject constructor(
 				list
 			}
 				.combine(observeEnabledMihonSources()) { enabled, mihon ->
-				val list = ArrayList<MangaSourceInfo>(enabled.size + mihon.size)
-				val existingKeys = enabled.mapTo(HashSet<String>()) { it.name }
-				mihon.filterNot { it.name in existingKeys }
-					.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = MihonSourceRuntime.isPinned(context, it)) }
-				list.addAll(enabled)
+				val cleanEnabled = enabled.filterNot { it.mangaSource is MihonMangaSource }
+				val list = ArrayList<MangaSourceInfo>(cleanEnabled.size + mihon.size)
+				mihon.filter { MihonSourceRuntime.isPinned(context, it) }
+					.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+				list.addAll(cleanEnabled)
 				list.sortWith(compareBy<MangaSourceInfo> { !it.isPinned }.thenBy { it.getTitle(context) })
 				list
 			}
@@ -361,18 +361,18 @@ class MangaSourcesRepository @Inject constructor(
 		val mihon = sources.filterIsInstance<MihonMangaSource>()
 		mihon.forEach {
 			MihonSourceRuntime.setEnabled(context, it, isEnabled)
-			dao.upsert(MangaSourceEntity(source = it.name, isEnabled = isEnabled, sortKey = 0, addedIn = BuildConfig.VERSION_CODE, lastUsedAt = 0L, isPinned = MihonSourceRuntime.isPinned(context, it), cfState = 0))
-			dao.setEnabled(it.name, isEnabled)
 		}
 		val native = sources.filterNot { it is MihonMangaSource }
 		if (native.isEmpty()) return
-		if (native.size == 1) { // fast path
-			dao.setEnabled(native.first().name, isEnabled)
-			return
-		}
-		db.withTransaction {
-			for (source in native) {
-				dao.setEnabled(source.name, isEnabled)
+		runCatching {
+			if (native.size == 1) { // fast path
+				dao.setEnabled(native.first().name, isEnabled)
+			} else {
+				db.withTransaction {
+					for (source in native) {
+						dao.setEnabled(source.name, isEnabled)
+					}
+				}
 			}
 		}
 	}
@@ -389,18 +389,18 @@ class MangaSourcesRepository @Inject constructor(
 	private suspend fun setSourcesPinnedImpl(sources: Collection<MangaSource>, isPinned: Boolean) {
 		sources.filterIsInstance<MihonMangaSource>().forEach {
 			MihonSourceRuntime.setPinned(context, it, isPinned)
-			dao.upsert(MangaSourceEntity(source = it.name, isEnabled = true, sortKey = 0, addedIn = BuildConfig.VERSION_CODE, lastUsedAt = 0L, isPinned = isPinned, cfState = 0))
-			dao.setPinned(it.name, isPinned)
 		}
 		val native = sources.filterNot { it is MihonMangaSource }
 		if (native.isEmpty()) return
-		if (native.size == 1) { // fast path
-			dao.setPinned(native.first().name, isPinned)
-			return
-		}
-		db.withTransaction {
-			for (source in native) {
-				dao.setPinned(source.name, isPinned)
+		runCatching {
+			if (native.size == 1) { // fast path
+				dao.setPinned(native.first().name, isPinned)
+			} else {
+				db.withTransaction {
+					for (source in native) {
+						dao.setPinned(source.name, isPinned)
+					}
+				}
 			}
 		}
 	}

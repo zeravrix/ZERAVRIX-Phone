@@ -19,17 +19,24 @@ import androidx.core.graphics.Insets
 import androidx.core.view.MenuProvider
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import androidx.lifecycle.lifecycleScope
 import coil3.ImageLoader
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import org.zeravrix.kotatsu.R
+import org.zeravrix.kotatsu.core.nav.router
+import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
+import org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager
+import org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime
 import org.zeravrix.kotatsu.core.ui.BaseActivity
 import org.zeravrix.kotatsu.core.ui.util.FadingAppbarMediator
 import org.zeravrix.kotatsu.core.ui.widgets.ChipsView
 import org.zeravrix.kotatsu.core.util.ext.observe
 import org.zeravrix.kotatsu.databinding.ActivityExtensionsBinding
+import org.zeravrix.kotatsu.extension.model.ContentWarning
 import org.zeravrix.kotatsu.extension.model.Extension
 import org.zeravrix.kotatsu.list.ui.adapter.TypedListSpacingDecoration
 import javax.inject.Inject
@@ -58,7 +65,39 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
 
         val adapter = ExtensionsAdapter(
             onItemClick = { ext ->
-                ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
+                if (ext is Extension.Installed) {
+                    val src = resolveSourceForExtension(ext)
+                    if (src != null) {
+                        router.openList(src, null, null)
+                    } else {
+                        lifecycleScope.launch {
+                            val refreshed = MihonSourceManager.refreshNow(applicationContext)
+                            val found = refreshed.find { it.packageName == ext.pkgName }
+                            if (found != null) {
+                                router.openList(found, null, null)
+                            } else {
+                                val fallback = MihonMangaSource(
+                                    packageName = ext.pkgName,
+                                    sourceId = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.id ?: 0L,
+                                    sourceName = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.name ?: ext.name,
+                                    language = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.lang ?: ext.lang.orEmpty(),
+                                    isNsfw = ext.contentWarning == ContentWarning.NSFW,
+                                )
+                                router.openList(fallback, null, null)
+                            }
+                        }
+                    }
+                } else {
+                    ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
+                }
+            },
+            onItemLongClick = { ext, view ->
+                if (ext is Extension.Installed) {
+                    showExtensionContextMenu(ext, view)
+                    true
+                } else {
+                    false
+                }
             },
             onActionClick = { ext ->
                 when {
@@ -295,6 +334,85 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
                 else -> false
             }
         }
+    }
+
+    private fun resolveSourceForExtension(ext: Extension): org.koitharu.kotatsu.parsers.model.MangaSource? {
+        val installed = MihonSourceManager.sources.value
+            .find { it.packageName == ext.pkgName }
+        if (installed != null) return installed
+
+        if (ext is Extension.Loaded) {
+            val s = ext.sources.firstOrNull()
+            if (s != null) {
+                return MihonMangaSource(
+                    packageName = ext.pkgName,
+                    sourceId = s.id,
+                    sourceName = s.name,
+                    language = s.lang,
+                    isNsfw = ext.contentWarning == ContentWarning.NSFW,
+                )
+            }
+        }
+        return null
+    }
+
+    private fun showExtensionContextMenu(ext: Extension.Installed, anchor: View) {
+        val popup = PopupMenu(this, anchor)
+        val isPinned = MihonSourceRuntime.isPackagePinned(this, ext.pkgName)
+
+        popup.menu.add(Menu.NONE, 1, 1, R.string.explore)
+        popup.menu.add(Menu.NONE, 2, 2, if (isPinned) R.string.unpin else R.string.pin)
+        popup.menu.add(Menu.NONE, 3, 3, R.string.uninstall)
+
+        popup.setOnMenuItemClickListener { menuItem ->
+            when (menuItem.itemId) {
+                1 -> {
+                    val src = resolveSourceForExtension(ext)
+                    if (src != null) {
+                        router.openList(src, null, null)
+                    } else {
+                        lifecycleScope.launch {
+                            val refreshed = MihonSourceManager.refreshNow(applicationContext)
+                            val found = refreshed.find { it.packageName == ext.pkgName }
+                            if (found != null) {
+                                router.openList(found, null, null)
+                            } else {
+                                val fallback = MihonMangaSource(
+                                    packageName = ext.pkgName,
+                                    sourceId = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.id ?: 0L,
+                                    sourceName = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.name ?: ext.name,
+                                    language = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.lang ?: ext.lang.orEmpty(),
+                                    isNsfw = ext.contentWarning == ContentWarning.NSFW,
+                                )
+                                router.openList(fallback, null, null)
+                            }
+                        }
+                    }
+                    true
+                }
+                2 -> {
+                    val newPinned = !isPinned
+                    MihonSourceRuntime.setPackagePinned(this, ext.pkgName, pinned = newPinned)
+                    val msgRes = if (newPinned) R.string.source_pinned else R.string.source_unpinned
+                    Toast.makeText(this, msgRes, Toast.LENGTH_SHORT).show()
+                    true
+                }
+                3 -> {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle(R.string.uninstall)
+                        .setMessage(getString(R.string.uninstall_extension_confirm, ext.name))
+                        .setPositiveButton(R.string.uninstall) { _, _ ->
+                            viewModel.uninstall(ext.pkgName)
+                            Toast.makeText(this, R.string.extension_uninstalled, Toast.LENGTH_SHORT).show()
+                        }
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show()
+                    true
+                }
+                else -> false
+            }
+        }
+        popup.show()
     }
 
     companion object {

@@ -133,7 +133,12 @@ class FeedViewModel @Inject constructor(
 
 	private suspend fun List<TrackingLogItem>.mapListTo(destination: MutableList<ListModel>) {
 		var prevDate: DateTimeAgo? = null
+		val seenMangaKeys = HashSet<String>()
 		for (item in this) {
+			val key = "${item.manga.id}_${item.chapters.joinToString(",")}"
+			if (!seenMangaKeys.add(key)) {
+				continue
+			}
 			val date = calculateTimeAgo(item.createdAt)
 			if (prevDate != date) {
 				destination += if (date != null) {

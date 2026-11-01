@@ -161,6 +161,11 @@ class MihonMangaRepository(
     }
 
     override suspend fun getPageUrl(page: MangaPage): String = withContext(Dispatchers.IO) {
+        val preview = page.preview
+        if (!preview.isNullOrBlank() && (preview.startsWith("http://") || preview.startsWith("https://"))) {
+            return@withContext preview
+        }
+
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
@@ -169,11 +174,11 @@ class MihonMangaRepository(
         val mihonPage = Page(
             index = 0,
             url = page.url,
-            imageUrl = (page.preview ?: "").takeIf { it.isNotBlank() },
+            imageUrl = preview?.takeIf { it.isNotBlank() },
         )
 
         SourceGate.execute(effectiveSourceId) {
-            val imageUrl = runCatching { httpSource.getImageUrl(mihonPage) }.getOrNull() ?: page.preview
+            val imageUrl = runCatching { httpSource.getImageUrl(mihonPage) }.getOrNull() ?: preview
             (imageUrl ?: "").ifBlank { page.url }
         }
     }

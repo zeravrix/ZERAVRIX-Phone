@@ -39,6 +39,12 @@ abstract class TrackLogsDao : MangaQueryBuilder.ConditionCallback {
 	@Insert(onConflict = OnConflictStrategy.REPLACE)
 	abstract suspend fun insert(entity: TrackLogEntity): Long
 
+	@Query("SELECT * FROM track_logs WHERE manga_id = :mangaId ORDER BY created_at DESC LIMIT 1")
+	abstract suspend fun findLatestByMangaId(mangaId: Long): TrackLogEntity?
+
+	@Query("DELETE FROM track_logs WHERE id NOT IN (SELECT MAX(id) FROM track_logs GROUP BY manga_id, chapters)")
+	abstract suspend fun deleteDuplicates()
+
 	@Query("DELETE FROM track_logs WHERE manga_id NOT IN (SELECT manga_id FROM tracks)")
 	abstract suspend fun gc()
 
