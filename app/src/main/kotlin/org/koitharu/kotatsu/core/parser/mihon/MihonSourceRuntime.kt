@@ -30,17 +30,33 @@ data class MihonMangaSource(
 
     companion object {
         private val metadata = ConcurrentHashMap<String, MihonMangaSource>()
+        private val packageToSource = ConcurrentHashMap<String, MihonMangaSource>()
 
         fun fromKey(key: String): MihonMangaSource? {
             if (!key.startsWith("mihon:")) return null
             metadata[key]?.let { return it }
             val parts = key.removePrefix("mihon:").split(':', limit = 2)
             if (parts.size != 2) return null
-            return MihonMangaSource(parts[0], parts[1].toLongOrNull() ?: return null)
+            val pkg = parts[0]
+            val parsedId = parts[1].toLongOrNull() ?: return null
+
+            // Check if we have a known loaded source for this package
+            val byPkg = MihonSourceManager.sources.value.find { it.packageName == pkg }
+                ?: packageToSource[pkg]
+                ?: metadata.values.find { it.packageName == pkg && it.sourceId != 0L }
+
+            if (byPkg != null && (parsedId == 0L || parsedId == byPkg.sourceId)) {
+                return byPkg
+            }
+
+            return MihonMangaSource(pkg, parsedId)
         }
 
         internal fun remember(source: MihonMangaSource) {
             metadata[source.name] = source
+            if (source.sourceId != 0L) {
+                packageToSource[source.packageName] = source
+            }
         }
 
         internal fun retain(keys: Set<String>) {
@@ -145,6 +161,20 @@ object MihonSourceRuntime {
         if (prefs.contains(key)) return prefs.getBoolean(key, true)
         val legacyKey = "enabled:${descriptor.name}"
         if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
+        val pkgKey = "source_enabled_pkg_${descriptor.packageName}"
+        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
+        return true
+    }
+
+    fun isPackageEnabled(context: Context, packageName: String): Boolean {
+        val prefs = preferences(context)
+        val pkgKey = "source_enabled_pkg_$packageName"
+        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
+        for (key in prefs.all.keys) {
+            if (key.startsWith("source_enabled_mihon:$packageName:") && prefs.getBoolean(key, true) == false) {
+                return false
+            }
+        }
         return true
     }
 
@@ -152,6 +182,7 @@ object MihonSourceRuntime {
         preferences(context).edit()
             .putBoolean(enabledKey(descriptor), enabled)
             .putBoolean("enabled:${descriptor.name}", enabled)
+            .putBoolean("source_enabled_pkg_${descriptor.packageName}", enabled)
             .apply()
         MihonSourceManager.debounceRefresh()
     }

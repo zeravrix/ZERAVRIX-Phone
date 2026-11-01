@@ -113,6 +113,13 @@ class SourcesCatalogViewModel @Inject constructor(
 		}
 	}
 
+	fun removeSource(source: MangaSource) {
+		launchJob(Dispatchers.Default) {
+			val rollback = repository.setSourcesEnabled(setOf(source), false)
+			onActionDone.call(ReversibleAction(R.string.source_disabled, rollback))
+		}
+	}
+
 	fun setContentType(value: ContentType, isAdd: Boolean) {
 		val filter = appliedFilter.value
 		val types = EnumSet.noneOf(ContentType::class.java)
@@ -177,40 +184,54 @@ class SourcesCatalogViewModel @Inject constructor(
 			locale = filter.locale,
 			sortOrder = SourcesSortOrder.ALPHABETIC,
 		)
-			val normalizedQuery = query?.trim().orEmpty()
-			val runtimeItems = mihonSources.asSequence()
-				.filter { source ->
-					(filter.locale.isNullOrBlank() || source.language.equals(filter.locale, ignoreCase = true)) &&
-					(normalizedQuery.isBlank() || source.sourceName.contains(normalizedQuery, ignoreCase = true))
+		val normalizedQuery = query?.trim().orEmpty()
+		val runtimeItems = mihonSources.asSequence()
+			.filter { source ->
+				(filter.locale.isNullOrBlank() || source.language.equals(filter.locale, ignoreCase = true)) &&
+				(normalizedQuery.isBlank() || source.sourceName.contains(normalizedQuery, ignoreCase = true))
+			}
+			.sortedWith(compareBy({ extensionLanguageSortKey(it.language) }, { it.sourceName.lowercase() }))
+			.map { source ->
+				SourceCatalogItem.Source(
+					source = source,
+					isEnabled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isEnabled(context, source),
+				)
+			}
+			.toList()
+		val hideNsfwExtensions = settings.isNsfwContentDisabled
+		val loadedPackages = mihonSources.mapTo(HashSet<String>()) { it.packageName }
+		val extensionItems = extensions.asSequence()
+			.filterNot { it.packageName in loadedPackages }
+			.filter { entry -> !hideNsfwExtensions || entry.nsfw == 0 }
+			.filter { entry ->
+				(filter.locale.isNullOrBlank() || entry.language.equals(filter.locale, ignoreCase = true)) &&
+				(normalizedQuery.isBlank() || listOf(entry.sourceName, entry.extensionName, entry.packageName).any { it.contains(normalizedQuery, ignoreCase = true) })
+			}
+			.sortedWith(compareBy({ extensionLanguageSortKey(it.language) }, { it.sourceName.lowercase() }, { it.extensionName.lowercase() }))
+			.map { entry ->
+				val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.isPackageInstalled(entry.packageName)
+				val isEnabled = if (isInstalled) {
+					org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.isPackageEnabled(context, entry.packageName)
+				} else {
+					false
 				}
-				.sortedWith(compareBy({ extensionLanguageSortKey(it.language) }, { it.sourceName.lowercase() }))
-				.map { SourceCatalogItem.Source(source = it) }
-				.toList()
-			val hideNsfwExtensions = settings.isNsfwContentDisabled
-			val installedPackages = mihonSources.mapTo(HashSet<String>()) { it.packageName }
-			val extensionItems = extensions.asSequence()
-				.filterNot { it.packageName in installedPackages }
-				.filter { entry -> !hideNsfwExtensions || entry.nsfw == 0 }
-				.filter { entry ->
-					(filter.locale.isNullOrBlank() || entry.language.equals(filter.locale, ignoreCase = true)) &&
-					(normalizedQuery.isBlank() || listOf(entry.sourceName, entry.extensionName, entry.packageName).any { it.contains(normalizedQuery, ignoreCase = true) })
-				}
-				.sortedWith(compareBy({ extensionLanguageSortKey(it.language) }, { it.sourceName.lowercase() }, { it.extensionName.lowercase() }))
-				.map { entry ->
-					SourceCatalogItem.Extension(
-						sourceName = entry.sourceName,
-						language = entry.language,
-						extensionName = entry.extensionName,
-						packageName = entry.packageName,
-						versionName = entry.versionName,
-						apkUrl = entry.apkUrl,
-						iconRes = extensionIconRes(entry.packageName),
-						iconUrl = entry.iconUrl,
-						isInstalling = entry.packageName in installing,
-					)
-				}
-				.toList()
-				val items = runtimeItems + sources.map { SourceCatalogItem.Source(source = it) } + extensionItems
+				SourceCatalogItem.Extension(
+					sourceName = entry.sourceName,
+					language = entry.language,
+					extensionName = entry.extensionName,
+					packageName = entry.packageName,
+					versionName = entry.versionName,
+					apkUrl = entry.apkUrl,
+					iconRes = extensionIconRes(entry.packageName),
+					iconUrl = entry.iconUrl,
+					isInstalling = entry.packageName in installing,
+					isInstalled = isInstalled,
+					isEnabled = isEnabled,
+				)
+			}
+			.toList()
+		val nativeItems = sources.map { SourceCatalogItem.Source(source = it, isEnabled = false) }
+		val items = runtimeItems + nativeItems + extensionItems
 			return if (items.isEmpty()) {
 
 			listOf(

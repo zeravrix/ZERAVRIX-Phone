@@ -41,6 +41,21 @@ object MihonSourceManager {
 
     private val loadedSourcesMap = ConcurrentHashMap<String, LoadedMihonSource>()
     private val stubSourcesMap = ConcurrentHashMap<String, LoadedMihonSource>()
+    val installedPackageNames: MutableSet<String> = ConcurrentHashMap.newKeySet<String>()
+
+    fun isPackageInstalled(packageName: String): Boolean {
+        if (packageName in installedPackageNames) return true
+        if (loadedSourcesMap.values.any { it.descriptor.packageName == packageName }) {
+            installedPackageNames.add(packageName)
+            return true
+        }
+        val mgr = extensionManager
+        if (mgr != null && (mgr.getLoadedExtensions().any { it.pkgName == packageName } || mgr.getNotLoadedExtensions().any { it.pkgName == packageName })) {
+            installedPackageNames.add(packageName)
+            return true
+        }
+        return false
+    }
 
     private var refreshJob: Job? = null
     private var initializedContext: Context? = null
@@ -69,6 +84,17 @@ object MihonSourceManager {
             val mgr = ExtensionManager.getInstance(appContext)
             extensionManager = mgr
             updateLoadedSources(mgr.getLoadedExtensions())
+
+            scope.launch(Dispatchers.IO) {
+                val privateDir = org.zeravrix.kotatsu.extension.util.ExtensionLoader.getPrivateExtensionDir(appContext)
+                privateDir.listFiles()?.forEach { file ->
+                    if (file.isFile && file.name.endsWith(".ext")) {
+                        installedPackageNames.add(file.name.removeSuffix(".ext"))
+                    }
+                }
+                mgr.getLoadedExtensions().forEach { installedPackageNames.add(it.pkgName) }
+                mgr.getNotLoadedExtensions().forEach { installedPackageNames.add(it.pkgName) }
+            }
 
             // Listen to loaded extensions from the ExtensionManager
             scope.launch {
@@ -120,6 +146,8 @@ object MihonSourceManager {
         loadedSourcesMap.clear()
         stubSourcesMap.clear()
         loadedSourcesMap.putAll(newMap)
+        installedPackageNames.addAll(loadedExts.map { it.pkgName })
+        installedPackageNames.addAll(descriptors.map { it.packageName })
         MihonMangaSource.retain(newMap.keys)
 
         _sources.value = descriptors
@@ -185,7 +213,10 @@ object MihonSourceManager {
      */
     fun get(descriptor: MihonMangaSource): LoadedMihonSource {
         loadedSourcesMap[descriptor.name]?.let { return it }
-        loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        if (descriptor.sourceId != 0L) {
+            loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        }
+        loadedSourcesMap.values.find { it.descriptor.packageName == descriptor.packageName }?.let { return it }
 
         return stubSourcesMap.getOrPut(descriptor.name) {
             val stub = StubSource(

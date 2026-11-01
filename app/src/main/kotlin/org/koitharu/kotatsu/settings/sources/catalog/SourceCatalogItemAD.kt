@@ -42,7 +42,15 @@ fun sourceCatalogItemSourceAD(
 	)
 
 	bind {
+		binding.progressBarDownload.isVisible = false
 		binding.imageViewAdd.isVisible = true
+		if (item.isEnabled) {
+			binding.imageViewAdd.setImageResource(R.drawable.ic_remove)
+			binding.imageViewAdd.contentDescription = context.getString(R.string.remove)
+		} else {
+			binding.imageViewAdd.setImageResource(R.drawable.ic_add)
+			binding.imageViewAdd.contentDescription = context.getString(R.string.add)
+		}
 		binding.textViewTitle.text = item.source.getTitle(context)
 		binding.textViewDescription.text = item.source.getSummary(context)
 		binding.textViewDescription.drawableStart = if ((item.source as? MangaParserSource)?.isBroken == true) {
@@ -50,8 +58,8 @@ fun sourceCatalogItemSourceAD(
 		} else {
 			null
 		}
-		FaviconDrawable(context, R.style.FaviconDrawable_Small, item.source.name)
 		val src = item.source
+		binding.textViewBadge.isVisible = (src is MihonMangaSource)
 		if (src is MihonMangaSource) {
 			val realIcon = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime.getIcon(context, src)
 			if (realIcon != null) {
@@ -77,64 +85,59 @@ fun sourceCatalogItemExtensionAD(
 ) = adapterDelegateViewBinding<SourceCatalogItem.Extension, ListModel, ItemSourceCatalogBinding>(
 	{ layoutInflater, parent -> ItemSourceCatalogBinding.inflate(layoutInflater, parent, false) },
 ) {
-		binding.imageViewAdd.setOnClickListener { v ->
-			val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-				.any { it.packageName == item.packageName }
-				|| org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(context, item.packageName) != null
-			if (isInstalled) {
-				listener.onItemLongClick(item, v)
-			} else {
-				listener.onItemClick(item, v)
-			}
-		}
-		binding.root.setOnClickListener { v -> listener.onItemClick(item, v) }
-		bind {
-			val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-				.any { it.packageName == item.packageName }
-				|| org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(context, item.packageName) != null
-
-			if (item.isInstalling) {
-				binding.progressBarDownload.isVisible = true
-				binding.imageViewAdd.isVisible = false
-			} else {
-				binding.progressBarDownload.isVisible = false
-				binding.imageViewAdd.isVisible = true
-				if (isInstalled) {
-					binding.imageViewAdd.setImageResource(R.drawable.ic_add)
-					binding.imageViewAdd.contentDescription = context.getString(R.string.add)
-				} else {
-					binding.imageViewAdd.setImageResource(R.drawable.ic_download)
-					binding.imageViewAdd.contentDescription = context.getString(R.string.install)
-				}
-			}
-			binding.textViewTitle.text = item.sourceName
-			binding.textViewBadge.isVisible = true
-			binding.textViewDescription.text = listOfNotNull(
-				item.language.takeIf { it.isNotBlank() },
-				item.extensionName.takeIf { it.isNotBlank() },
-				item.versionName.takeIf { it.isNotBlank() },
-			).joinToString(" · ")
-			binding.textViewDescription.drawableStart = null
-			binding.imageViewIcon.disposeImage()
-			if (item.iconRes != R.drawable.zeravrix_chibi) {
-				binding.imageViewIcon.setImageResource(item.iconRes)
-			} else if (item.iconUrl.isNotBlank()) {
-				binding.imageViewIcon.setImageAsync(item.iconUrl)
-			} else {
-				binding.imageViewIcon.setImageResource(item.iconRes)
-			}
+	binding.imageViewAdd.setOnClickListener { v ->
+		if (item.isInstalled) {
+			listener.onItemLongClick(item, v)
+		} else {
+			listener.onItemClick(item, v)
 		}
 	}
+	binding.root.setOnClickListener { v -> listener.onItemClick(item, v) }
+	bind {
+		if (item.isInstalling) {
+			binding.progressBarDownload.isVisible = true
+			binding.imageViewAdd.isVisible = false
+		} else {
+			binding.progressBarDownload.isVisible = false
+			binding.imageViewAdd.isVisible = true
+			if (item.isInstalled) {
+				if (item.isEnabled) {
+					binding.imageViewAdd.setImageResource(R.drawable.ic_remove)
+					binding.imageViewAdd.contentDescription = context.getString(R.string.remove)
+				} else {
+					binding.imageViewAdd.setImageResource(R.drawable.ic_add)
+					binding.imageViewAdd.contentDescription = context.getString(R.string.add)
+				}
+			} else {
+				binding.imageViewAdd.setImageResource(R.drawable.ic_download)
+				binding.imageViewAdd.contentDescription = context.getString(R.string.install)
+			}
+		}
+		binding.textViewTitle.text = item.sourceName
+		binding.textViewBadge.isVisible = true
+		binding.textViewDescription.text = listOfNotNull(
+			item.language.takeIf { it.isNotBlank() },
+			item.extensionName.takeIf { it.isNotBlank() },
+			item.versionName.takeIf { it.isNotBlank() },
+		).joinToString(" · ")
+		binding.textViewDescription.drawableStart = null
+		binding.imageViewIcon.disposeImage()
+		if (item.iconRes != R.drawable.zeravrix_chibi) {
+			binding.imageViewIcon.setImageResource(item.iconRes)
+		} else if (item.iconUrl.isNotBlank()) {
+			binding.imageViewIcon.setImageAsync(item.iconUrl)
+		} else {
+			binding.imageViewIcon.setImageResource(item.iconRes)
+		}
+	}
+}
 
 fun sourceCatalogItemHintAD() = adapterDelegateViewBinding<SourceCatalogItem.Hint, ListModel, ItemEmptyHintBinding>(
 	{ inflater, parent -> ItemEmptyHintBinding.inflate(inflater, parent, false) },
 ) {
-
-	binding.buttonRetry.isVisible = false
-
 	bind {
-		binding.icon.setImageAsync(item.icon)
+		binding.icon.setImageResource(item.icon)
 		binding.textPrimary.setText(item.title)
-		binding.textSecondary.setTextAndVisible(item.text)
+		binding.textSecondary.setText(item.text)
 	}
 }

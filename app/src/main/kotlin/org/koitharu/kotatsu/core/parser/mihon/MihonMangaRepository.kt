@@ -51,6 +51,7 @@ class MihonMangaRepository(
     override suspend fun getList(offset: Int, order: SortOrder?, filter: MangaListFilter?): List<Manga> =
         withContext(Dispatchers.IO) {
             val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+            val effectiveSourceId = loaded.descriptor.sourceId
             val pageSize = if (estimatedPageSize > 0) estimatedPageSize else PAGE_SIZE
             val page = when {
                 offset == 0 -> {
@@ -62,7 +63,7 @@ class MihonMangaRepository(
             }
             val query = filter?.query.orEmpty()
 
-            val result = SourceGate.execute(source.sourceId) {
+            val result = SourceGate.execute(effectiveSourceId) {
                 when {
                     query.isNotBlank() -> loaded.source.getSearchManga(page, query, FilterList())
                     order == SortOrder.NEWEST || order == SortOrder.UPDATED || order == SortOrder.NEWEST_ASC || order == SortOrder.UPDATED_ASC ->
@@ -81,7 +82,7 @@ class MihonMangaRepository(
             // Ensure first page loads enough items to fill modern vertical screens
             if (offset == 0 && allFetched.size in 1..15 && result.hasNextPage) {
                 runCatching {
-                    val page2 = SourceGate.execute(source.sourceId) {
+                    val page2 = SourceGate.execute(effectiveSourceId) {
                         when {
                             query.isNotBlank() -> loaded.source.getSearchManga(2, query, FilterList())
                             order == SortOrder.NEWEST || order == SortOrder.UPDATED || order == SortOrder.NEWEST_ASC || order == SortOrder.UPDATED_ASC ->
@@ -104,9 +105,10 @@ class MihonMangaRepository(
 
     override suspend fun getDetailsImpl(manga: Manga): Manga = withContext(Dispatchers.IO) {
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
 
-        val update = SourceGate.execute(source.sourceId) {
+        val update = SourceGate.execute(effectiveSourceId) {
             loaded.source.getMangaUpdate(
                 manga.toSManga(),
                 manga.chapters.orEmpty().map { it.toSChapter() },
@@ -121,21 +123,22 @@ class MihonMangaRepository(
                     ?.takeIf { it.startsWith("http", ignoreCase = true) }
                 ?: resolveUrl(httpSource.baseUrl, manga.url)
 
-            SourceGate.execute(source.sourceId) {
+            SourceGate.execute(effectiveSourceId) {
                 OlympusStaffParser.chapters(httpSource, mangaUrl).map { it.toKotatsuChapter() }
             }
         } else {
             update.chapters.orEmpty().map { it.toKotatsuChapter() }
         }
 
-        update.manga.toKotatsuManga(chapters).copy(id = manga.id, source = source)
+        update.manga.toKotatsuManga(chapters).copy(id = manga.id, source = loaded.descriptor)
     }
 
     override suspend fun getPagesImpl(chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
 
-        val mihonPages = SourceGate.execute(source.sourceId) {
+        val mihonPages = SourceGate.execute(effectiveSourceId) {
             if (httpSource != null && OlympusStaffParser.applies(httpSource)) {
                 val chapterUrl = chapter.url.takeIf { it.startsWith("http", ignoreCase = true) }
                     ?: runCatching { httpSource.getChapterUrl(chapter.toSChapter()) }.getOrNull()
@@ -149,16 +152,17 @@ class MihonMangaRepository(
 
         mihonPages.map { page ->
             MangaPage(
-                id = stableId(source.name, "page:${page.index}:${page.url}"),
+                id = stableId(loaded.descriptor.name, "page:${page.index}:${page.url}"),
                 url = page.url,
                 preview = page.imageUrl.orEmpty(),
-                source = source,
+                source = loaded.descriptor,
             )
         }
     }
 
     override suspend fun getPageUrl(page: MangaPage): String = withContext(Dispatchers.IO) {
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
             ?: return@withContext page.url
 
@@ -168,7 +172,7 @@ class MihonMangaRepository(
             imageUrl = (page.preview ?: "").takeIf { it.isNotBlank() },
         )
 
-        SourceGate.execute(source.sourceId) {
+        SourceGate.execute(effectiveSourceId) {
             val imageUrl = runCatching { httpSource.getImageUrl(mihonPage) }.getOrNull() ?: page.preview
             (imageUrl ?: "").ifBlank { page.url }
         }

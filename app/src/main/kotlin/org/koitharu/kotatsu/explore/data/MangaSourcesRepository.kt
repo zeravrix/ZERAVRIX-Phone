@@ -72,16 +72,14 @@ class MangaSourcesRepository @Inject constructor(
 		val order = settings.sourcesSortOrder
 		return dao.findAll(!settings.isAllSourcesEnabled, order).toSources(settings.isNsfwContentDisabled, order)
 			.let { enabled ->
-									val external = getExternalSources()
-					val mihon = getMihonSources()
-						.filter { MihonSourceRuntime.isEnabled(context, it) }
-						.filterNot { settings.isNsfwContentDisabled && it.isNsfw }
-					val list = ArrayList<MangaSourceInfo>(enabled.size + external.size + mihon.size)
-						external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
-						mihon.filterNot { settings.isNsfwContentDisabled && it.isNsfw }
-						.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = MihonSourceRuntime.isPinned(context, it)) }
-					list.addAll(enabled)
-
+				val external = getExternalSources()
+				val mihon = getMihonSources()
+					.filter { MihonSourceRuntime.isEnabled(context, it) }
+					.filterNot { settings.isNsfwContentDisabled && it.isNsfw }
+				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size + mihon.size)
+				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+				mihon.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = MihonSourceRuntime.isPinned(context, it)) }
+				enabled.filterNotTo(list) { it.mangaSource is MihonMangaSource }
 				list
 			}
 	}
@@ -91,12 +89,12 @@ class MangaSourcesRepository @Inject constructor(
 			val skipNsfw = settings.isNsfwContentDisabled
 			val result = HashSet<MangaSource>().apply {
 				addAll(dao.findAllPinned().mapNotNullToSet {
-					it.source.toMangaSourceOrNull()?.takeUnless { x -> skipNsfw && x.isNsfw() }
+					it.source.toMangaSourceOrNull()?.takeUnless { x -> (skipNsfw && x.isNsfw()) || (x is MihonMangaSource && x.sourceId == 0L) }
 				})
 			}
 			withContext(Dispatchers.IO) {
-getMihonSources()
-						.filter { MihonSourceRuntime.isEnabled(context, it) && MihonSourceRuntime.isPinned(context, it) }
+				getMihonSources()
+					.filter { MihonSourceRuntime.isEnabled(context, it) && MihonSourceRuntime.isPinned(context, it) }
 					.filterNot { skipNsfw && it.isNsfw }
 					.forEach(result::add)
 			}
@@ -311,6 +309,7 @@ getMihonSources()
 	}
 
 	private suspend fun assimilateNewSources(): Boolean {
+		runCatching { dao.deleteCorruptedMihonSources() }
 		if (isNewSourcesAssimilated.getAndSet(true)) {
 			return false
 		}
@@ -483,7 +482,13 @@ getMihonSources()
 		val isAllEnabled = settings.isAllSourcesEnabled
 		val result = ArrayList<MangaSourceInfo>(size)
 		for (entity in this) {
+			if (entity.source.startsWith("mihon:") && entity.source.endsWith(":0")) {
+				continue
+			}
 			val source = entity.source.toMangaSourceOrNull() ?: continue
+			if (source is MihonMangaSource && source.sourceId == 0L) {
+				continue
+			}
 			if (skipNsfwSources && source.isNsfw()) {
 				continue
 			}

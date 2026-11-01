@@ -53,65 +53,75 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 		super.onCreate(savedInstanceState)
 		setContentView(ActivitySourcesCatalogBinding.inflate(layoutInflater))
 		setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
-					val sourcesAdapter = SourcesCatalogAdapter(
-				this,
-				object : OnListItemClickListener<SourceCatalogItem.Extension> {
-					override fun onItemClick(item: SourceCatalogItem.Extension, view: View) {
-						val installedSource = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-							.find { it.packageName == item.packageName }
-						if (installedSource != null) {
-							router.openList(installedSource, null, null)
-							return
-						}
-						val loadedExt = org.zeravrix.kotatsu.extension.ExtensionManager.getInstance(applicationContext)
-							.getLoadedExtensions().find { it.pkgName == item.packageName }
-						val s = loadedExt?.sources?.firstOrNull()
-						if (s != null) {
-							val src = org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(
-								packageName = loadedExt.pkgName,
-								sourceId = s.id,
-								sourceName = s.name,
-								language = s.lang,
-								isNsfw = loadedExt.contentWarning == org.zeravrix.kotatsu.extension.model.ContentWarning.NSFW,
-							)
-							router.openList(src, null, null)
-							return
-						}
-						val pkgInfo = org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(applicationContext, item.packageName)
-						if (pkgInfo != null) {
-							lifecycleScope.launch {
-								val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
-								val src = refreshed.find { it.packageName == item.packageName }
-									?: org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(item.packageName, 0L, item.sourceName, item.language)
-								router.openList(src, null, null)
-							}
-							return
-						}
-						installExtension(item)
+		val sourcesAdapter = SourcesCatalogAdapter(
+			this,
+			object : OnListItemClickListener<SourceCatalogItem.Extension> {
+				override fun onItemClick(item: SourceCatalogItem.Extension, view: View) {
+					val installedSource = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
+						.find { it.packageName == item.packageName }
+					if (installedSource != null) {
+						router.openList(installedSource, null, null)
+						return
 					}
-
-					override fun onItemLongClick(item: SourceCatalogItem.Extension, view: View): Boolean {
-						val installedSource = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-							.find { it.packageName == item.packageName }
-						if (installedSource != null) {
-							viewModel.addSource(installedSource)
-							return true
-						}
-						val pkgInfo = org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(applicationContext, item.packageName)
-						if (pkgInfo != null) {
-							lifecycleScope.launch {
-								val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
-								val src = refreshed.find { it.packageName == item.packageName }
-									?: org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(item.packageName, 0L, item.sourceName, item.language)
-								viewModel.addSource(src)
+					val loadedExt = org.zeravrix.kotatsu.extension.ExtensionManager.getInstance(applicationContext)
+						.getLoadedExtensions().find { it.pkgName == item.packageName }
+					val s = loadedExt?.sources?.firstOrNull()
+					if (s != null) {
+						val src = org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(
+							packageName = loadedExt.pkgName,
+							sourceId = s.id,
+							sourceName = s.name,
+							language = s.lang,
+							isNsfw = loadedExt.contentWarning == org.zeravrix.kotatsu.extension.model.ContentWarning.NSFW,
+						)
+						router.openList(src, null, null)
+						return
+					}
+					if (item.isInstalled) {
+						lifecycleScope.launch {
+							val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
+							val src = refreshed.find { it.packageName == item.packageName }
+							if (src != null) {
+								router.openList(src, null, null)
+							} else {
+								android.widget.Toast.makeText(this@SourcesCatalogActivity, "Loading source...", android.widget.Toast.LENGTH_SHORT).show()
 							}
-							return true
 						}
-						installExtension(item)
+						return
+					}
+					installExtension(item)
+				}
+
+				override fun onItemLongClick(item: SourceCatalogItem.Extension, view: View): Boolean {
+					val installedSource = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
+						.find { it.packageName == item.packageName }
+					if (installedSource != null) {
+						if (item.isEnabled) {
+							viewModel.removeSource(installedSource)
+						} else {
+							viewModel.addSource(installedSource)
+						}
 						return true
 					}
-				},
-			)
+					if (item.isInstalled) {
+						lifecycleScope.launch {
+							val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
+							val src = refreshed.find { it.packageName == item.packageName }
+							if (src != null) {
+								if (item.isEnabled) {
+									viewModel.removeSource(src)
+								} else {
+									viewModel.addSource(src)
+								}
+							}
+						}
+						return true
+					}
+					installExtension(item)
+					return true
+				}
+			},
+		)
 
 		with(viewBinding.recyclerView) {
 			setHasFixedSize(true)
@@ -160,10 +170,14 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 		router.openList(item.source, null, null)
 	}
 
-		override fun onItemLongClick(item: SourceCatalogItem.Source, view: View): Boolean {
+	override fun onItemLongClick(item: SourceCatalogItem.Source, view: View): Boolean {
+		if (item.isEnabled) {
+			viewModel.removeSource(item.source)
+		} else {
 			viewModel.addSource(item.source)
-			return false
 		}
+		return true
+	}
 
 		private fun openExtensionManager() {
 			startActivity(Intent(this, ExtensionsActivity::class.java))
