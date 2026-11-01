@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:app="http://schemas.android.com/apk/res-auto"
+	xmlns:tools="http://schemas.android.com/tools"
+	android:layout_width="match_parent"
+	android:layout_height="wrap_content"
+	android:orientation="vertical"
+	android:paddingBottom="@dimen/margin_large">
+
+	<include
+		android:id="@+id/header"
+		layout="@layout/layout_sheet_header_adaptive" />
+
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:gravity="center_vertical"
+		android:orientation="horizontal"
+		android:paddingHorizontal="@dimen/list_spacing_large"
+		android:paddingVertical="@dimen/margin_normal">
+
+		<org.zeravrix.kotatsu.core.ui.image.FaviconView
+			android:id="@+id/imageView_icon"
+			android:layout_width="48dp"
+			android:layout_height="48dp"
+			android:background="?colorControlHighlight"
+			app:iconStyle="@style/FaviconDrawable"
+			app:shapeAppearance="?shapeAppearanceCornerMedium"
+			tools:src="@tools:sample/avatars" />
+
+		<LinearLayout
+			android:layout_width="0dp"
+			android:layout_height="wrap_content"
+			android:layout_marginStart="@dimen/margin_normal"
+			android:layout_weight="1"
+			android:orientation="vertical">
+
+			<TextView
+				android:id="@+id/textView_name"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:textAppearance="?textAppearanceTitleMedium"
+				tools:text="Extension Name" />
+
+			<TextView
+				android:id="@+id/textView_version"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:textAppearance="?textAppearanceBodySmall"
+				tools:text="1.4.2 · org.zeravrix.extension" />
+
+			<TextView
+				android:id="@+id/textView_status"
+				android:layout_width="match_parent"
+				android:layout_height="wrap_content"
+				android:layout_marginTop="2dp"
+				android:textAppearance="?textAppearanceLabelSmall"
+				android:textColor="?colorError"
+				android:visibility="gone"
+				tools:text="Untrusted signature" />
+
+		</LinearLayout>
+
+	</LinearLayout>
+
+	<LinearLayout
+		android:id="@+id/layout_sources"
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:orientation="vertical"
+		android:paddingHorizontal="@dimen/list_spacing_large" />
+
+	<LinearLayout
+		android:layout_width="match_parent"
+		android:layout_height="wrap_content"
+		android:gravity="end"
+		android:orientation="horizontal"
+		android:paddingHorizontal="@dimen/list_spacing_large"
+		android:paddingTop="@dimen/margin_normal">
+
+		<com.google.android.material.button.MaterialButton
+			android:id="@+id/button_trust"
+			style="@style/Widget.Material3.Button.TonalButton"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:layout_marginEnd="@dimen/margin_small"
+			android:text="@string/trust"
+			android:visibility="gone"
+			tools:visibility="visible" />
+
+		<com.google.android.material.button.MaterialButton
+			android:id="@+id/button_uninstall"
+			style="@style/Widget.Material3.Button.OutlinedButton"
+			android:layout_width="wrap_content"
+			android:layout_height="wrap_content"
+			android:textColor="?colorError"
+			android:text="@string/uninstall" />
+
+	</LinearLayout>
+
+</LinearLayout>
