@@ -54,6 +54,9 @@
 			<action android:name="eu.kanade.tachiyomi.extension" />
 		</intent>
 		<intent>
+			<action android:name="app.kotatsu.parser.PROVIDE_MANGA" />
+		</intent>
+		<intent>
 			<action android:name="org.koitharu.kotatsu.parser.PROVIDE_MANGA" />
 		</intent>
 		<intent>

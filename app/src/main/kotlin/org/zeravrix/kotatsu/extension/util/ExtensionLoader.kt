@@ -173,7 +173,7 @@ object ExtensionLoader {
         unpackBundledExtensions(context)
         val pkgManager = context.packageManager
 
-        val discoveryFlags = PackageManager.GET_CONFIGURATIONS
+        val discoveryFlags = PackageManager.GET_CONFIGURATIONS or PackageManager.GET_META_DATA
         val installedPkgs = runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pkgManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(discoveryFlags.toLong()))
@@ -436,7 +436,7 @@ object ExtensionLoader {
         }
 
         val classLoader = try {
-            dalvik.system.PathClassLoader(apkPath, context.classLoader)
+            DelegateLastClassLoaderCompat(apkPath, null, context.classLoader)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create classloader for $pkgName", e)
             return notLoaded(Extension.NotLoaded.Reason.Failed(e.message ?: "ClassLoader error", e.stackTraceToString()), libVersion)
@@ -454,7 +454,7 @@ object ExtensionLoader {
             .map { if (it.startsWith(".")) pkgName + it else it }
             .flatMap { className ->
                 try {
-                    when (val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().newInstance()) {
+                    when (val obj = Class.forName(className, false, classLoader).getDeclaredConstructor().apply { isAccessible = true }.newInstance()) {
                         is Source -> listOf(obj)
                         is SourceFactory -> obj.createSources()
                         else -> throw IllegalArgumentException("Unknown source class: ${obj.javaClass}")
@@ -496,7 +496,8 @@ object ExtensionLoader {
             pkg.startsWith("tachiyomi.extension") ||
             pkg.startsWith("org.zeravrix.extension") ||
             pkg.contains(".extension.") ||
-            pkg.endsWith(".extension")
+            pkg.endsWith(".extension") ||
+            pkg.contains(".parser.")
         ) {
             return true
         }

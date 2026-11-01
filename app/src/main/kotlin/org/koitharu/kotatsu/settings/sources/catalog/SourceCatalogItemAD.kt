@@ -80,6 +80,7 @@ fun sourceCatalogItemExtensionAD(
 		binding.imageViewAdd.setOnClickListener { v ->
 			val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
 				.any { it.packageName == item.packageName }
+				|| org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(context, item.packageName) != null
 			if (isInstalled) {
 				listener.onItemLongClick(item, v)
 			} else {
@@ -90,6 +91,7 @@ fun sourceCatalogItemExtensionAD(
 		bind {
 			val isInstalled = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
 				.any { it.packageName == item.packageName }
+				|| org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(context, item.packageName) != null
 
 			if (item.isInstalling) {
 				binding.progressBarDownload.isVisible = true

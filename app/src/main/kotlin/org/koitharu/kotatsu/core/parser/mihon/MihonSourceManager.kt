@@ -68,6 +68,7 @@ object MihonSourceManager {
             initializedContext = appContext
             val mgr = ExtensionManager.getInstance(appContext)
             extensionManager = mgr
+            updateLoadedSources(mgr.getLoadedExtensions())
 
             // Listen to loaded extensions from the ExtensionManager
             scope.launch {
@@ -151,6 +152,7 @@ object MihonSourceManager {
         }
         mutex.withLock {
             extensionManager?.loadExtensions()
+            extensionManager?.getLoadedExtensions()?.let { updateLoadedSources(it) }
         }
         return _sources.value
     }

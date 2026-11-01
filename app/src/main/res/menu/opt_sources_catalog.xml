@@ -4,16 +4,17 @@
 	xmlns:app="http://schemas.android.com/apk/res-auto">
 
 	<item
-		android:id="@+id/action_add_extension"
-		android:icon="@drawable/ic_add"
-		android:title="@string/source_extensions"
-		app:showAsAction="always" />
-
-	<item
 		android:id="@+id/action_search"
 		android:icon="?actionModeWebSearchDrawable"
 		android:title="@string/search"
 		app:actionViewClass="androidx.appcompat.widget.SearchView"
 		app:showAsAction="ifRoom|collapseActionView" />
 
+	<item
+		android:id="@+id/action_add_extension"
+		android:icon="@drawable/ic_add"
+		android:title="@string/source_extensions"
+		app:showAsAction="always" />
+
 </menu>
+

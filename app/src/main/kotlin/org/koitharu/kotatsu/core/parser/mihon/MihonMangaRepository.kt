@@ -51,20 +51,14 @@ class MihonMangaRepository(
     override suspend fun getList(offset: Int, order: SortOrder?, filter: MangaListFilter?): List<Manga> =
         withContext(Dispatchers.IO) {
             val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+            val pageSize = if (estimatedPageSize > 0) estimatedPageSize else PAGE_SIZE
             val page = when {
                 offset == 0 -> {
                     lastPage = 1
                     lastOffset = 0
                     1
                 }
-                estimatedPageSize > 0 -> (offset / estimatedPageSize) + 1
-                offset > lastOffset -> {
-                    val p = lastPage + 1
-                    lastPage = p
-                    lastOffset = offset
-                    p
-                }
-                else -> (offset / 20) + 1
+                else -> (offset / pageSize) + 1
             }
             val query = filter?.query.orEmpty()
 
@@ -83,7 +77,24 @@ class MihonMangaRepository(
                 lastOffset = offset
             }
 
-            val mangas = result.mangas.map { it.toKotatsuManga(emptyList()) }
+            val allFetched = ArrayList(result.mangas)
+            // Ensure first page loads enough items to fill modern vertical screens
+            if (offset == 0 && allFetched.size in 1..15 && result.hasNextPage) {
+                runCatching {
+                    val page2 = SourceGate.execute(source.sourceId) {
+                        when {
+                            query.isNotBlank() -> loaded.source.getSearchManga(2, query, FilterList())
+                            order == SortOrder.NEWEST || order == SortOrder.UPDATED || order == SortOrder.NEWEST_ASC || order == SortOrder.UPDATED_ASC ->
+                                loaded.source.getLatestUpdates(2)
+                            else -> loaded.source.getPopularManga(2)
+                        }
+                    }
+                    allFetched.addAll(page2.mangas)
+                    lastPage = 2
+                }
+            }
+
+            val mangas = allFetched.map { it.toKotatsuManga(emptyList()) }
             when (order) {
                 SortOrder.ALPHABETICAL -> mangas.sortedBy { it.title.lowercase() }
                 SortOrder.ALPHABETICAL_DESC -> mangas.sortedByDescending { it.title.lowercase() }

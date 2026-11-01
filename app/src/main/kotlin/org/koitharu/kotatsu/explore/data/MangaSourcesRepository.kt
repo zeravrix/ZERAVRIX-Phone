@@ -461,9 +461,11 @@ getMihonSources()
 
 	fun getExternalSources(): List<ExternalMangaSource> {
 		val pm = context.packageManager
+		val intentKotatsu = Intent("app.kotatsu.parser.PROVIDE_MANGA")
 		val intentZeravrix = Intent("org.zeravrix.kotatsu.parser.PROVIDE_MANGA")
 		val intentKoitharu = Intent("org.koitharu.kotatsu.parser.PROVIDE_MANGA")
-		val providers = (pm.queryIntentContentProviders(intentZeravrix, 0) +
+		val providers = (pm.queryIntentContentProviders(intentKotatsu, 0) +
+			pm.queryIntentContentProviders(intentZeravrix, 0) +
 			pm.queryIntentContentProviders(intentKoitharu, 0))
 			.distinctBy { it.providerInfo.packageName }
 		return providers.map { resolveInfo ->

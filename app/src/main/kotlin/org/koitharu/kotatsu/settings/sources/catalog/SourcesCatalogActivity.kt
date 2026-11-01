@@ -14,6 +14,8 @@ import androidx.core.view.updatePadding
 import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.chip.Chip
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.combine
 import org.zeravrix.kotatsu.R
 import org.zeravrix.kotatsu.core.model.titleResId
@@ -75,6 +77,16 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 							router.openList(src, null, null)
 							return
 						}
+						val pkgInfo = org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(applicationContext, item.packageName)
+						if (pkgInfo != null) {
+							lifecycleScope.launch {
+								val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
+								val src = refreshed.find { it.packageName == item.packageName }
+									?: org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(item.packageName, 0L, item.sourceName, item.language)
+								router.openList(src, null, null)
+							}
+							return
+						}
 						installExtension(item)
 					}
 
@@ -83,9 +95,19 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 							.find { it.packageName == item.packageName }
 						if (installedSource != null) {
 							viewModel.addSource(installedSource)
-						} else {
-							installExtension(item)
+							return true
 						}
+						val pkgInfo = org.zeravrix.kotatsu.extension.util.ExtensionLoader.getExtensionPackageInfoFromPkgName(applicationContext, item.packageName)
+						if (pkgInfo != null) {
+							lifecycleScope.launch {
+								val refreshed = org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(applicationContext)
+								val src = refreshed.find { it.packageName == item.packageName }
+									?: org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(item.packageName, 0L, item.sourceName, item.language)
+								viewModel.addSource(src)
+							}
+							return true
+						}
+						installExtension(item)
 						return true
 					}
 				},
