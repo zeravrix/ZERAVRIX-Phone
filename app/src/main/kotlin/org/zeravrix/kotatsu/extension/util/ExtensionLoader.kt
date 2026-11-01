@@ -173,26 +173,45 @@ object ExtensionLoader {
         unpackBundledExtensions(context)
         val pkgManager = context.packageManager
 
-        val installedPkgs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            pkgManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(PACKAGE_FLAGS.toLong()))
-        } else {
-            pkgManager.getInstalledPackages(PACKAGE_FLAGS)
+        val discoveryFlags = PackageManager.GET_CONFIGURATIONS
+        val installedPkgs = runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pkgManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(discoveryFlags.toLong()))
+            } else {
+                @Suppress("DEPRECATION")
+                pkgManager.getInstalledPackages(discoveryFlags)
+            }
+        }.getOrElse {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pkgManager.getInstalledPackages(PackageManager.PackageInfoFlags.of(0L))
+            } else {
+                @Suppress("DEPRECATION")
+                pkgManager.getInstalledPackages(0)
+            }
         }
 
         val sharedExtPkgs = installedPkgs
             .asSequence()
             .filter { isPackageAnExtension(it, context) }
-            .map {
-                // Ensure applicationInfo metadata is loaded
-                if (it.applicationInfo?.metaData == null) {
+            .map { pkg ->
+                val fullPkg = runCatching {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        pkgManager.getPackageInfo(pkg.packageName, PackageManager.PackageInfoFlags.of(PACKAGE_FLAGS.toLong()))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        pkgManager.getPackageInfo(pkg.packageName, PACKAGE_FLAGS)
+                    }
+                }.getOrNull() ?: pkg
+
+                if (fullPkg.applicationInfo?.metaData == null) {
                     val meta = runCatching {
-                        pkgManager.getApplicationInfo(it.packageName, PackageManager.GET_META_DATA).metaData
+                        pkgManager.getApplicationInfo(fullPkg.packageName, PackageManager.GET_META_DATA).metaData
                     }.getOrNull()
                     if (meta != null) {
-                        it.applicationInfo?.metaData = meta
+                        fullPkg.applicationInfo?.metaData = meta
                     }
                 }
-                ExtensionInfo(packageInfo = it, isShared = true)
+                ExtensionInfo(packageInfo = fullPkg, isShared = true)
             }
             .toList()
 
@@ -417,7 +436,7 @@ object ExtensionLoader {
         }
 
         val classLoader = try {
-            DelegateLastClassLoaderCompat(apkPath, null, context.classLoader)
+            dalvik.system.PathClassLoader(apkPath, context.classLoader)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create classloader for $pkgName", e)
             return notLoaded(Extension.NotLoaded.Reason.Failed(e.message ?: "ClassLoader error", e.stackTraceToString()), libVersion)
@@ -472,9 +491,12 @@ object ExtensionLoader {
 
     fun isPackageAnExtension(pkgInfo: PackageInfo, context: Context? = null): Boolean {
         if (pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }) return true
-        if (pkgInfo.packageName.startsWith("eu.kanade.tachiyomi.extension") ||
-            pkgInfo.packageName.startsWith("tachiyomi.extension") ||
-            pkgInfo.packageName.contains("extension")
+        val pkg = pkgInfo.packageName
+        if (pkg.startsWith("eu.kanade.tachiyomi.extension") ||
+            pkg.startsWith("tachiyomi.extension") ||
+            pkg.startsWith("org.zeravrix.extension") ||
+            pkg.contains(".extension.") ||
+            pkg.endsWith(".extension")
         ) {
             return true
         }

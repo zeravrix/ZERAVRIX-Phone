@@ -172,6 +172,7 @@ object MihonSourceManager {
         refreshNow(context)
         loadedSourcesMap[descriptor.name]?.let { return it }
         loadedSourcesMap.values.find { it.descriptor.sourceId == descriptor.sourceId }?.let { return it }
+        loadedSourcesMap.values.find { it.descriptor.packageName == descriptor.packageName }?.let { return it }
 
         return get(descriptor)
     }

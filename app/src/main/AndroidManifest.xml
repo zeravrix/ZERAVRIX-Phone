@@ -38,12 +38,26 @@
 		tools:ignore="AllFilesAccessPolicy,ScopedStorage" />
 
 	<queries>
+		<package android:name="eu.kanade.tachiyomi" />
+		<package android:name="eu.kanade.tachiyomi.debug" />
 		<intent>
 			<action android:name="android.intent.action.PROCESS_TEXT" />
 			<data android:mimeType="text/plain" />
 		</intent>
 		<intent>
 			<action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+		</intent>
+		<intent>
+			<action android:name="tachiyomi.extension" />
+		</intent>
+		<intent>
+			<action android:name="eu.kanade.tachiyomi.extension" />
+		</intent>
+		<intent>
+			<action android:name="org.koitharu.kotatsu.parser.PROVIDE_MANGA" />
+		</intent>
+		<intent>
+			<action android:name="org.zeravrix.kotatsu.parser.PROVIDE_MANGA" />
 		</intent>
 	</queries>
 

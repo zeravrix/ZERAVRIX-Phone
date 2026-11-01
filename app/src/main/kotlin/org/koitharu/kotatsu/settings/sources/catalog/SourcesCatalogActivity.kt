@@ -59,9 +59,23 @@ class SourcesCatalogActivity : BaseActivity<ActivitySourcesCatalogBinding>(),
 							.find { it.packageName == item.packageName }
 						if (installedSource != null) {
 							router.openList(installedSource, null, null)
-						} else {
-							installExtension(item)
+							return
 						}
+						val loadedExt = org.zeravrix.kotatsu.extension.ExtensionManager.getInstance(applicationContext)
+							.getLoadedExtensions().find { it.pkgName == item.packageName }
+						val s = loadedExt?.sources?.firstOrNull()
+						if (s != null) {
+							val src = org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource(
+								packageName = loadedExt.pkgName,
+								sourceId = s.id,
+								sourceName = s.name,
+								language = s.lang,
+								isNsfw = loadedExt.contentWarning == org.zeravrix.kotatsu.extension.model.ContentWarning.NSFW,
+							)
+							router.openList(src, null, null)
+							return
+						}
+						installExtension(item)
 					}
 
 					override fun onItemLongClick(item: SourceCatalogItem.Extension, view: View): Boolean {

@@ -64,7 +64,7 @@ class MihonMangaRepository(
                     lastOffset = offset
                     p
                 }
-                else -> (offset / 10) + 1
+                else -> (offset / 20) + 1
             }
             val query = filter?.query.orEmpty()
 
@@ -170,20 +170,20 @@ class MihonMangaRepository(
             .getOrDefault(value)
 
     private fun SManga.toKotatsuManga(chapters: List<MangaChapter>): Manga = Manga(
-        id = stableId(source.name, url),
-        title = title,
+        id = stableId(source.name, if (url.isNotBlank()) url else "${title}_$thumbnail_url"),
+        title = title.ifBlank { "Untitled" },
         altTitles = emptySet(),
         url = url,
         publicUrl = url,
         rating = 0f,
         contentRating = if (source.isNsfw) ContentRating.ADULT else ContentRating.SAFE,
-        coverUrl = thumbnail_url,
+        coverUrl = thumbnail_url?.takeIf { it.isNotBlank() },
         tags = genre?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.map {
             org.koitharu.kotatsu.parsers.model.MangaTag(title = it, key = it.lowercase(), source = source)
         }?.toSet().orEmpty(),
         state = status.toMangaState(),
         authors = listOfNotNull(author ?: artist).toSet(),
-        largeCoverUrl = thumbnail_url,
+        largeCoverUrl = thumbnail_url?.takeIf { it.isNotBlank() },
         description = description,
         chapters = chapters,
         source = source,
@@ -202,7 +202,7 @@ class MihonMangaRepository(
 
     private fun SChapter.toKotatsuChapter(): MangaChapter = MangaChapter(
         id = stableId(source.name, "chapter:$url"),
-        title = name.trim().removePrefix("#").trim(),
+        title = name.trim().removePrefix("#").trim().ifBlank { "Chapter ${chapter_number.takeIf { it > 0 } ?: ""}" }.trim(),
         number = chapter_number,
         volume = 0,
         url = url,
