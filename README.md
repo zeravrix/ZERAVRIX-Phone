@@ -1,24 +1,28 @@
 <div align="center">
 
-<img src="assets/banner.svg" alt="ZERAVRIX Phone 2.0" width="100%" />
+<img src="assets/logo.png" alt="ZERAVRIX Logo" width="220" />
+
+# ⚡ ZERAVRIX Phone 2.0
+
+**The Ultimate Next-Generation Manga, Manhwa & Comic Reader for Android**
 
 <br/>
 
+[![Official Website](https://img.shields.io/badge/Official%20Website-zeravrix.pages.dev-00D2FF.svg?style=for-the-badge&logo=google-chrome&logoColor=white)](https://zeravrix.pages.dev/)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://github.com/zeravrix/ZERAVRIX-Phone/releases)
 [![Language](https://img.shields.io/badge/Language-Kotlin%20100%25-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org/)
 [![License](https://img.shields.io/badge/License-GPL--3.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Latest Release](https://img.shields.io/badge/Release-v2.0.0-00D2FF.svg?style=for-the-badge&logo=github)](https://github.com/zeravrix/ZERAVRIX-Phone/releases/latest)
-[![Engine](https://img.shields.io/badge/Engine-Native%20%2B%20Mihon%20APKs-6366F1.svg?style=for-the-badge)](https://github.com/zeravrix/ZERAVRIX-Phone)
 
 <br/>
 
-### ⚡ The Ultimate High-Performance Manga, Manhwa & Comic Reader for Android
+🌐 **Official Portal**: [**https://zeravrix.pages.dev/**](https://zeravrix.pages.dev/)
 
-**ZERAVRIX Phone 2.0** combines the raw performance of native Kotlin parsers with the boundless versatility of the **Tachiyomi / Mihon APK Extension** ecosystem. Built on **Material Design 3**, powered by **OkHttp 5 + Brotli**, and featuring an **Auto-Trust Sandbox**, ZERAVRIX Phone offers the smoothest reading experience with zero telemetry and 100% privacy.
+**ZERAVRIX Phone 2.0** combines the raw performance of native Kotlin parsers with the boundless versatility of the **Tachiyomi / Mihon APK Extension** ecosystem. Built on **Material Design 3**, powered by **OkHttp 5 + Brotli**, and featuring an **Auto-Trust Sandbox & Package Installer Integration**, ZERAVRIX Phone offers the smoothest reading experience with zero telemetry and 100% privacy.
 
 <br/>
 
-[📥 **Download Latest Release APK (v2.0.0)**](https://github.com/zeravrix/ZERAVRIX-Phone/releases/latest) • [✨ Features](#-key-features) • [🏗️ Architecture](#️-architecture) • [🛠️ Building](#-building-from-source) • [📜 Changelog](#-changelog--release-notes)
+[📥 **Download Latest Release APK**](https://github.com/zeravrix/ZERAVRIX-Phone/releases/latest) • [🌐 Website](https://zeravrix.pages.dev/) • [✨ Features](#-key-features) • [🏗️ Architecture](#️-architecture) • [🛠️ Building](#-building-from-source) • [📜 Changelog](#-changelog--release-notes)
 
 </div>
 
@@ -26,11 +30,11 @@
 
 ## ✨ Key Features
 
-### 🔌 Universal Extension Engine
-* **Full Mihon & Tachiyomi Compatibility**: Run thousands of community extension APKs inside a secure `DelegateLastClassLoader` sandbox without needing root or third-party wrappers.
-* **Auto-Trust Sandbox**: Downloaded extensions are automatically verified and trusted without interrupting your browsing flow.
-* **Smart Catalog & Live Spinner**: Browse available sources with real-time download progress indicators that dynamically transition to a `+` pin button when installation succeeds.
-* **1-Tap Explore Pinning**: Pin any installed native or extension source directly to your Explore home tab.
+### 🔌 Universal Extension Engine & Package Installer
+* **Full Mihon & Tachiyomi Compatibility**: Execute thousands of community extension APKs inside a secure sandbox or via the Android Package Installer.
+* **Auto-Trust & Explore Pinning**: All installed extension sources are automatically recognized, enabled, and pinned to your Explore tab by default.
+* **Native Install Dialog Support**: Prompts the standard Android system installer dialog so you can easily review and approve source APK installations.
+* **Smart Catalog & Live Spinner**: Browse sources with real-time download progress indicators that dynamically transition to a `+` pin button when installation succeeds.
 * **Custom Repositories**: Easily add, synchronize, and remove custom extension repository JSON URLs with live validation.
 
 ### 📖 Immersive Reader & Offline Engine
@@ -77,6 +81,7 @@ graph TD
 
 | Domain | Technology / Library | Description |
 |---|---|---|
+| **Official Website** | [zeravrix.pages.dev](https://zeravrix.pages.dev/) | Official portal & web home for ZERAVRIX ecosystem |
 | **Core Architecture** | MVVM + Clean Architecture | Unidirectional data flow with state persistence |
 | **Language** | Kotlin 2.0+ & Coroutines | 100% Kotlin codebase with Flow & StateFlow reactive state |
 | **Dependency Injection** | Hilt / Dagger 2 | Scoped dependencies across Activities, ViewModels, and Workers |
@@ -84,7 +89,6 @@ graph TD
 | **Networking** | OkHttp 5 + Brotli + Conscrypt | Modern HTTP/2 & HTTP/3 engine with Brotli decompression |
 | **Image Pipeline** | Coil 3 + SSIV | Memory-optimized bitmap caching & deep-zoom tiling |
 | **Extension Sandbox** | Dalvik `DelegateLastClassLoader` | Dynamic runtime isolation for Tachiyomi / Mihon APKs |
-| **HTML Parsing** | JSoup 1.18+ | Robust CSS selector query engine for manga scrapers |
 | **UI Components** | Google Material Design 3 | Material You dynamic color, Edge-to-Edge window insets |
 
 ---
@@ -92,7 +96,7 @@ graph TD
 ## 🚀 Getting Started
 
 ### Installation
-1. Go to the [**Releases Page**](https://github.com/zeravrix/ZERAVRIX-Phone/releases/latest).
+1. Visit the [**Releases Page**](https://github.com/zeravrix/ZERAVRIX-Phone/releases/latest) or our [**Official Website**](https://zeravrix.pages.dev/).
 2. Download `ZERAVRIX_Phone_2.0_release.apk`.
 3. Open the downloaded file on your Android device and tap **Install**.
 4. *(If prompted, allow "Install from Unknown Sources" in your device settings).*
@@ -129,7 +133,6 @@ graph TD
    ```bash
    ./gradlew assembleDebug
    ```
-   *The generated APK will be placed in `app/build/outputs/apk/debug/app-debug.apk`.*
 
 4. **Assemble Release Build**:
    ```bash
@@ -141,11 +144,13 @@ graph TD
 
 ## 📜 Changelog — Release v2.0.0
 
+* 📲 **Package Installer Integration**: Prompts the standard Android system installer dialog on APK downloads for seamless user approval.
+* 📌 **Automatic Source Discovery & Pinning**: Automatically scans all installed extension packages on the device and pins them in Explore by default.
 * ⚡ **Full Mihon Extension Engine Integration**: Browse, install, and execute community source APKs directly.
 * 🔄 **Dynamic Download Progress**: Circular indeterminate spinner appears while downloading extensions, transitioning to a `+` pin button on install.
 * 🚀 **Unstripped Brotli Pipeline**: Configured strict keep rules preventing R8 from stripping OkHttp / Brotli internals (`NoClassDefFoundError: Lokhttp3/brotli/Brotli;` resolved).
 * 🏷️ **Clean Chapter Titles**: Eliminated redundant leading `#` characters in chapter lists.
-* 🎨 **Refined Brand Identity**: Integrated high-resolution blue ZK logo on pure AMOLED black splash screens.
+* 🎨 **Real ZK Logo Brand Identity**: Preserved the genuine blue ZK logo on pure AMOLED black splash screens and across GitHub documentation.
 * 🧹 **Theme & Locale Modernization**: Removed deprecated Spider-Verse theme and legacy locale files for a cleaner, leaner binary.
 * 🛡️ **NSFW Filtration**: Instant toggling of 18+ sources across catalog and search results.
 
@@ -158,6 +163,7 @@ This project is licensed under the **GNU General Public License v3.0** (GPL-3.0)
 ---
 
 <div align="center">
+  <sub>Official Website: <a href="https://zeravrix.pages.dev/"><b>zeravrix.pages.dev</b></a></sub><br/>
   <sub>Developed with ❤️ for the global manga & manhwa reading community.</sub><br/>
   <b><a href="https://github.com/zeravrix/ZERAVRIX-Phone">github.com/zeravrix/ZERAVRIX-Phone</a></b>
 </div>

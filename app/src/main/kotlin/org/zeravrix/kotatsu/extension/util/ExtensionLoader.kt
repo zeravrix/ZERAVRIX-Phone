@@ -181,8 +181,20 @@ object ExtensionLoader {
 
         val sharedExtPkgs = installedPkgs
             .asSequence()
-            .filter { isPackageAnExtension(it) }
-            .map { ExtensionInfo(packageInfo = it, isShared = true) }
+            .filter { isPackageAnExtension(it, context) }
+            .map {
+                // Ensure applicationInfo metadata is loaded
+                if (it.applicationInfo?.metaData == null) {
+                    val meta = runCatching {
+                        pkgManager.getApplicationInfo(it.packageName, PackageManager.GET_META_DATA).metaData
+                    }.getOrNull()
+                    if (meta != null) {
+                        it.applicationInfo?.metaData = meta
+                    }
+                }
+                ExtensionInfo(packageInfo = it, isShared = true)
+            }
+            .toList()
 
         val privateExtPkgs = getPrivateExtensionDir(context)
             .listFiles()
@@ -194,24 +206,33 @@ object ExtensionLoader {
                     file.setReadOnly()
                 }
                 val path = file.absolutePath
-                pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)?.also { pkg ->
-                    pkg.applicationInfo?.fixBasePaths(path)
+                val pkg = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pkgManager.getPackageArchiveInfo(path, PackageManager.PackageInfoFlags.of(PACKAGE_FLAGS.toLong()))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pkgManager.getPackageArchiveInfo(path, PACKAGE_FLAGS)
+                }
+                pkg?.also {
+                    it.applicationInfo?.fixBasePaths(path)
+                    if (it.applicationInfo?.metaData == null) {
+                        it.applicationInfo?.metaData = extractMetaDataFallback(path)
+                    }
                 }
             }
-            ?.filter { isPackageAnExtension(it) }
+            ?.filter { isPackageAnExtension(it, context) }
             ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
             ?.toList()
             .orEmpty()
 
-        val privateExtPkgsByName = privateExtPkgs.groupBy { it.packageInfo.packageName }
+        val sharedExtPkgsByName = sharedExtPkgs.associateBy { it.packageInfo.packageName }
+        val privateExtPkgsByName = privateExtPkgs.associateBy { it.packageInfo.packageName }
+        val allPkgNames = (sharedExtPkgs.map { it.packageInfo.packageName } + privateExtPkgs.map { it.packageInfo.packageName }).distinct()
 
-        val extPkgs = (sharedExtPkgs + privateExtPkgs)
-            .distinctBy { it.packageInfo.packageName }
-            .mapNotNull { sharedPkg ->
-                val privatePkg = privateExtPkgsByName[sharedPkg.packageInfo.packageName]?.firstOrNull()
-                selectExtensionPackage(sharedPkg, privatePkg)
-            }
-            .toList()
+        val extPkgs = allPkgNames.mapNotNull { pkgName ->
+            val shared = sharedExtPkgsByName[pkgName]
+            val private = privateExtPkgsByName[pkgName]
+            selectExtensionPackage(shared, private)
+        }
 
         if (extPkgs.isEmpty()) return emptyList()
 
@@ -449,11 +470,34 @@ object ExtensionLoader {
         )
     }
 
-    fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean {
-        return pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE } ||
-            pkgInfo.applicationInfo?.metaData?.containsKey(METADATA_SOURCE_CLASS) == true ||
-            pkgInfo.packageName.startsWith("eu.kanade.tachiyomi.extension") ||
-            pkgInfo.packageName.startsWith("tachiyomi.extension")
+    fun isPackageAnExtension(pkgInfo: PackageInfo, context: Context? = null): Boolean {
+        if (pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }) return true
+        if (pkgInfo.packageName.startsWith("eu.kanade.tachiyomi.extension") ||
+            pkgInfo.packageName.startsWith("tachiyomi.extension") ||
+            pkgInfo.packageName.contains("extension")
+        ) {
+            return true
+        }
+        val appInfo = pkgInfo.applicationInfo
+        val hasMeta = appInfo?.metaData?.containsKey(METADATA_SOURCE_CLASS) == true
+        if (hasMeta) return true
+
+        if (context != null) {
+            val loadedMeta = runCatching {
+                context.packageManager.getApplicationInfo(pkgInfo.packageName, PackageManager.GET_META_DATA).metaData
+            }.getOrNull()
+            if (loadedMeta?.containsKey(METADATA_SOURCE_CLASS) == true) {
+                return true
+            }
+        }
+        val sourceDir = appInfo?.sourceDir
+        if (sourceDir != null) {
+            val fallback = extractMetaDataFallback(sourceDir)
+            if (fallback?.containsKey(METADATA_SOURCE_CLASS) == true) {
+                return true
+            }
+        }
+        return false
     }
 
     fun getSignatures(pkgInfo: PackageInfo): List<String>? {

@@ -139,19 +139,38 @@ object MihonSourceRuntime {
         return builder.build()
     }
 
-    fun isEnabled(context: Context, descriptor: MihonMangaSource): Boolean =
-        preferences(context).getBoolean(enabledKey(descriptor), true)
+    fun isEnabled(context: Context, descriptor: MihonMangaSource): Boolean {
+        val prefs = preferences(context)
+        val key = enabledKey(descriptor)
+        if (prefs.contains(key)) return prefs.getBoolean(key, true)
+        val legacyKey = "enabled:${descriptor.name}"
+        if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
+        return true
+    }
 
     fun setEnabled(context: Context, descriptor: MihonMangaSource, enabled: Boolean) {
-        preferences(context).edit().putBoolean(enabledKey(descriptor), enabled).apply()
+        preferences(context).edit()
+            .putBoolean(enabledKey(descriptor), enabled)
+            .putBoolean("enabled:${descriptor.name}", enabled)
+            .apply()
         MihonSourceManager.debounceRefresh()
     }
 
-    fun isPinned(context: Context, descriptor: MihonMangaSource): Boolean =
-        preferences(context).getBoolean(pinnedKey(descriptor), false)
+    fun isPinned(context: Context, descriptor: MihonMangaSource): Boolean {
+        val prefs = preferences(context)
+        val key = pinnedKey(descriptor)
+        if (prefs.contains(key)) return prefs.getBoolean(key, true)
+        val legacyKey = "pinned:${descriptor.name}"
+        if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
+        // Default to TRUE so every installed extension source is pinned in Explore by default
+        return true
+    }
 
     fun setPinned(context: Context, descriptor: MihonMangaSource, pinned: Boolean) {
-        preferences(context).edit().putBoolean(pinnedKey(descriptor), pinned).apply()
+        preferences(context).edit()
+            .putBoolean(pinnedKey(descriptor), pinned)
+            .putBoolean("pinned:${descriptor.name}", pinned)
+            .apply()
         MihonSourceManager.debounceRefresh()
     }
 

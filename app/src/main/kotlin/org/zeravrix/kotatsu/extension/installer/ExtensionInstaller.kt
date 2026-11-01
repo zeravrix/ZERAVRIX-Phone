@@ -84,6 +84,26 @@ class ExtensionInstaller(
                 ExtensionLoader.installPrivateExtensionFile(context, tmpFile, packageInfo)
                 ExtensionInstallReceiver.notifyAdded(context, pkgName)
                 org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(context)
+
+                // Launch system package installer prompt so user can approve the APK install
+                try {
+                    val installerDir = File(context.cacheDir, "installer").apply { mkdirs() }
+                    val installApk = File(installerDir, "${pkgName}.apk")
+                    tmpFile.copyTo(installApk, overwrite = true)
+                    val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.files",
+                        installApk,
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(intent)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Could not launch system package installer intent", e)
+                }
+
                 stepFlow.value = InstallStep.Installed
             } catch (e: Exception) {
                 if (e is CancellationException) {
@@ -114,6 +134,24 @@ class ExtensionInstaller(
                 ?: return false
             ExtensionLoader.installPrivateExtensionFile(context, file, packageInfo)
             ExtensionInstallReceiver.notifyAdded(context, packageInfo.packageName)
+
+            try {
+                val installerDir = File(context.cacheDir, "installer").apply { mkdirs() }
+                val installApk = File(installerDir, "${packageInfo.packageName}.apk")
+                file.copyTo(installApk, overwrite = true)
+                val apkUri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.files",
+                    installApk,
+                )
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(intent)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not launch system package installer intent", e)
+            }
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install from file ${file.name}", e)
