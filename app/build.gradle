@@ -41,10 +41,21 @@ android {
 	}
 	signingConfigs {
 		release {
-			storeFile file("$rootDir/keystore/zeravrix-release.jks")
-			storePassword 'zeravrix2026'
-			keyAlias 'zeravrix'
-			keyPassword 'zeravrix2026'
+			def localProperties = new Properties()
+			def localPropertiesFile = rootProject.file('local.properties')
+			if (localPropertiesFile.exists()) {
+				localProperties.load(new FileInputStream(localPropertiesFile))
+			}
+			def keyPath = localProperties.getProperty('signing.key.path', System.getenv('SIGNING_KEY_PATH') ?: "$rootDir/keystore/zeravrix-release.jks")
+			def storePass = localProperties.getProperty('signing.store.password', System.getenv('SIGNING_STORE_PASSWORD') ?: '')
+			def keyAl = localProperties.getProperty('signing.key.alias', System.getenv('SIGNING_KEY_ALIAS') ?: 'zeravrix')
+			def keyPass = localProperties.getProperty('signing.key.password', System.getenv('SIGNING_KEY_PASSWORD') ?: storePass)
+			if (storePass && file(keyPath).exists()) {
+				storeFile file(keyPath)
+				storePassword storePass
+				keyAlias keyAl
+				keyPassword keyPass
+			}
 			v1SigningEnabled true
 			v2SigningEnabled true
 		}
@@ -54,14 +65,18 @@ android {
 			applicationIdSuffix = '.debug'
 		}
 		release {
-			signingConfig signingConfigs.release
+			if (signingConfigs.release.storeFile) {
+				signingConfig signingConfigs.release
+			}
 			minifyEnabled true
 			shrinkResources true
 			proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
 		}
 		nightly {
 			initWith release
-			signingConfig signingConfigs.release
+			if (signingConfigs.release.storeFile) {
+				signingConfig signingConfigs.release
+			}
 			applicationIdSuffix = '.nightly'
 		}
 	}

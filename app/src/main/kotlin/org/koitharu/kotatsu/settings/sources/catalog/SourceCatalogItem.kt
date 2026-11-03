@@ -48,3 +48,15 @@ sealed interface SourceCatalogItem : ListModel {
 		}
 	}
 }
+
+data class ExtensionSourceCatalogEntry(
+	val sourceName: String = "",
+	val language: String = "",
+	val extensionName: String = "",
+	val packageName: String = "",
+	val apkUrl: String = "",
+	val versionName: String = "",
+	val versionCode: Long = 0L,
+	val nsfw: Int = 0,
+	val iconUrl: String = "",
+)

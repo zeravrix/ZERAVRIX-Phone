@@ -27,8 +27,6 @@ import org.zeravrix.kotatsu.core.util.ext.call
 import org.zeravrix.kotatsu.core.util.ext.mapSortedByCount
 import org.zeravrix.kotatsu.explore.data.MangaSourcesRepository
 import org.zeravrix.kotatsu.explore.data.SourcesSortOrder
-import org.zeravrix.kotatsu.settings.sources.extensions.ExtensionCatalogRepository
-import org.zeravrix.kotatsu.settings.sources.extensions.ExtensionSourceCatalogEntry
 import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
 import org.zeravrix.kotatsu.list.ui.model.ListModel
 import org.zeravrix.kotatsu.list.ui.model.LoadingState
@@ -44,7 +42,6 @@ class SourcesCatalogViewModel @Inject constructor(
 	private val repository: MangaSourcesRepository,
 	db: MangaDatabase,
 	private val settings: AppSettings,
-	private val extensionCatalog: ExtensionCatalogRepository,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
@@ -53,7 +50,6 @@ class SourcesCatalogViewModel @Inject constructor(
 			val set = LinkedHashSet<String?>()
 			set.add(null)
 			repository.allMangaSources.mapNotNullTo(set) { it.locale?.takeIf { l -> l.isNotBlank() } }
-			extensionCatalog.entries.value.mapNotNullTo(set) { it.language.takeIf { l -> l.isNotBlank() && l != "all" } }
 			org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value.mapNotNullTo(set) { it.language.takeIf { l -> l.isNotBlank() && l != "all" } }
 			return set
 		}
@@ -73,13 +69,14 @@ class SourcesCatalogViewModel @Inject constructor(
 	val contentTypes = MutableStateFlow<List<ContentType>>(emptyList())
 
 	val installingPackages = MutableStateFlow<Set<String>>(emptySet())
+	private val catalogEntries = MutableStateFlow<List<ExtensionSourceCatalogEntry>>(emptyList())
 
 	@Suppress("UNCHECKED_CAST")
 	val content: StateFlow<List<ListModel>> = combine(
 		searchQuery,
 		appliedFilter,
 		db.invalidationTrackerFlow(TABLE_SOURCES),
-		extensionCatalog.entries,
+		catalogEntries,
 		repository.observeMihonSources(),
 		installingPackages,
 	) { args: Array<Any?> ->
@@ -122,7 +119,7 @@ class SourcesCatalogViewModel @Inject constructor(
 	}
 
 	fun findCatalogEntry(packageName: String): ExtensionSourceCatalogEntry? {
-		return extensionCatalog.entries.value.find { it.packageName == packageName }
+		return null
 	}
 
 	fun setContentType(value: ContentType, isAdd: Boolean) {

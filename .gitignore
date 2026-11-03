@@ -25,6 +25,9 @@
 /captures
 .externalNativeBuild
 .cxx
+/keystore/
+*.jks
+*.keystore
 /.idea/deviceManager.xml
 /.kotlin/
 /.idea/AndroidProjectSystem.xml

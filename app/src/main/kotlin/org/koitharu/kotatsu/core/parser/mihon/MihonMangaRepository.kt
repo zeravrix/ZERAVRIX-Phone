@@ -106,29 +106,17 @@ class MihonMangaRepository(
     override suspend fun getDetailsImpl(manga: Manga): Manga = withContext(Dispatchers.IO) {
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
-        val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
 
         val update = SourceGate.execute(effectiveSourceId) {
             loaded.source.getMangaUpdate(
                 manga.toSManga(),
                 manga.chapters.orEmpty().map { it.toSChapter() },
                 fetchDetails = true,
-                fetchChapters = httpSource?.let { !OlympusStaffParser.applies(it) } ?: true,
+                fetchChapters = true,
             )
         }
 
-        val chapters = if (httpSource != null && OlympusStaffParser.applies(httpSource)) {
-            val mangaUrl = manga.url.takeIf { it.startsWith("http", ignoreCase = true) }
-                ?: runCatching { httpSource.getMangaUrl(manga.toSManga()) }.getOrNull()
-                    ?.takeIf { it.startsWith("http", ignoreCase = true) }
-                ?: resolveUrl(httpSource.baseUrl, manga.url)
-
-            SourceGate.execute(effectiveSourceId) {
-                OlympusStaffParser.chapters(httpSource, mangaUrl).map { it.toKotatsuChapter() }
-            }
-        } else {
-            update.chapters.orEmpty().map { it.toKotatsuChapter() }
-        }
+        val chapters = update.chapters.orEmpty().map { it.toKotatsuChapter() }
 
         update.manga.toKotatsuManga(chapters).copy(id = manga.id, source = loaded.descriptor)
     }
@@ -136,18 +124,9 @@ class MihonMangaRepository(
     override suspend fun getPagesImpl(chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
         val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
-        val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
 
         val mihonPages = SourceGate.execute(effectiveSourceId) {
-            if (httpSource != null && OlympusStaffParser.applies(httpSource)) {
-                val chapterUrl = chapter.url.takeIf { it.startsWith("http", ignoreCase = true) }
-                    ?: runCatching { httpSource.getChapterUrl(chapter.toSChapter()) }.getOrNull()
-                        ?.takeIf { it.startsWith("http", ignoreCase = true) }
-                    ?: resolveUrl(httpSource.baseUrl, chapter.url)
-                OlympusStaffParser.pages(httpSource, chapterUrl)
-            } else {
-                loaded.source.getPageList(chapter.toSChapter())
-            }
+            loaded.source.getPageList(chapter.toSChapter())
         }
 
         mihonPages.map { page ->

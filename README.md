@@ -14,32 +14,49 @@
 
 <br/>
 
-ZERAVRIX Phone 2.0 combines the speed and efficiency of native source parsers with the boundless ecosystem of Tachiyomi and Mihon APK source extensions, wrapped in a sleek Material Design 3 interface.
+ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source parsers with the boundless ecosystem of Tachiyomi and Mihon APK source extensions, wrapped in a Material Design 3 interface.
 
-[Official Website](https://zeravrix.pages.dev/) • [Download Latest APK](https://github.com/zeravrix/ZERAVRIX-Phone/releases) • [Features](#features) • [Architecture](#architecture) • [Building](#building-from-source)
+[Official Website](https://zeravrix.pages.dev/) • [Download Latest APK](https://github.com/zeravrix/ZERAVRIX-Phone/releases) • [Specifications](#specifications) • [Architecture](#architecture) • [Building](#building-from-source)
 
 </div>
 
 ---
 
-## Features
+## Specifications
 
-### Universal Extension Engine
-- Full Mihon and Tachiyomi Compatibility: Seamlessly browse, install, trust, and run thousands of community source APKs directly.
-- Unified Catalog: Search native and extension sources side-by-side with genuine APK icons, language tags, and instant download progress spinners.
-- 1-Tap Explore Pinning: Tap the plus button on any installed source to pin it directly to your primary Explore tab.
-- Direct Repository Management: Add and manage custom HTTPS extension repositories with live synchronized updates.
+| Specification | Value |
+|---|---|
+| Application ID | org.zeravrix.android |
+| Code Namespace | org.zeravrix.kotatsu |
+| Minimum Android | Android 8.0 (API 26) |
+| Target Android | Android 14 (API 34) |
+| Supported Extensions | Mihon and Tachiyomi APKs (Lib 1.4 and 1.6) |
+| Primary Database | SQLite via Android Jetpack Room |
+| Networking Engine | OkHttp 5 + Conscrypt + Brotli Compression |
+| Image Pipeline | Coil 3 + Subsampling Scale ImageView |
+| In-App Updates | Anonymous GitHub Releases API Integration |
 
-### Immersive Reader Experience
-- Adaptive Reading Modes: Full support for Webtoon continuous vertical scroll with zero gap, Left-to-Right, Right-to-Left, and Dual-Page landscape viewing.
-- Full Offline Downloads: Fast, resilient multi-threaded background chapter downloads with pause, resume, and storage volume selection.
-- Brotli and OkHttp Acceleration: Complete unstripped Brotli and OkHttp network pipeline for fast image loading and CDN compatibility.
-- Smart Image Processing: Dynamic split-image rendering, crop borders, and automatic color inversion for comfortable night reading.
+---
 
-### Privacy, Security and Control
-- Auto-Trust Architecture: Streamlined extension sandbox automatically authenticates and activates user-installed extensions without blocking dialogues.
-- Content Ratings and NSFW Filter: Complete parental and discretion controls across search, Explore, catalog, and extensions.
-- No Telemetry and No Trackers: 100% private, client-side execution with local SQLite database storage and encrypted backup and restore.
+## Key Capabilities
+
+### Universal Extension Runtime
+- Full Mihon Compatibility: Browse, install, trust, and run thousands of community source APKs directly.
+- Single Source of Truth: All native and extension sources integrate into the Room database, guaranteeing instant search, pinning, reordering, and usage tracking.
+- Contextual Source Management: Explore sources directly, pin to Explore tab, or uninstall seamlessly.
+- Direct Repository Management: Connect HTTPS extension repositories with automated index updates.
+
+### Immersive Reader Engine
+- Adaptive Reading Modes: Continuous Webtoon vertical scroll with zero gap, Left-to-Right, Right-to-Left, and Dual-Page landscape viewing.
+- Resilient Downloads: Multi-threaded background chapter downloads with pause, resume, and storage volume selection.
+- Brotli Compression Pipeline: Full unstripped Brotli and OkHttp network pipeline for rapid image delivery and CDN compatibility.
+- Smart Image Processing: Dynamic split-image rendering, border cropping, and night reading color adjustments.
+
+### Privacy and Security
+- Cryptographic Signature Verification: Verifies APK signatures against trusted repository certificates before loading.
+- Untracked Local Signing: Build credentials and keystores remain strictly externalized and uncommitted.
+- Anonymous In-App Updates: Background release discovery runs anonymously via public endpoints without personal access tokens or telemetry.
+- Zero Trackers: Fully client-side execution with local database persistence and encrypted backup and restore.
 
 ---
 
@@ -47,32 +64,34 @@ ZERAVRIX Phone 2.0 combines the speed and efficiency of native source parsers wi
 
 ```mermaid
 graph TD
-    UI["App UI Layer (Explore, Catalog, Reader, Details)"] --> Router["AppRouter Navigation"]
-    Router --> Repositories["MangaRepository Factory"]
-    Repositories --> NativeRepo["Native Parser Repositories"]
-    Repositories --> MihonRepo["MihonMangaRepository"]
+    UI[UI Layer: Explore, Extensions, Reader, Library] --> SourcesRepo[MangaSourcesRepository]
+    SourcesRepo --> RoomDB[(Room Database: sources table)]
+    SourcesRepo --> Factory[MangaRepository Factory]
     
-    MihonRepo --> SourceManager["MihonSourceManager"]
-    SourceManager --> ClassLoader["DelegateLastClassLoader"]
-    ClassLoader --> ExtAPK["Extension APKs and Sandbox"]
+    Factory --> NativeParsers[Native Parsers Repository]
+    Factory --> MihonRepo[MihonMangaRepository]
     
-    ExtAPK --> Injekt["Injekt DI and NetworkHelper"]
-    Injekt --> OkHttp["OkHttp 5 and Brotli Engine"]
-    OkHttp --> Network["External CDNs and Web"]
+    MihonRepo --> SourceGate[SourceGate: 429 Throttle & Limiter]
+    SourceGate --> ExtLoader[ExtensionLoader: PathClassLoader]
+    ExtLoader --> ExtAPK[Extension APK Sandbox]
+    
+    ExtAPK --> Injekt[Injekt DI & NetworkHelper]
+    Injekt --> OkHttp[Shared OkHttp 5 & Brotli Engine]
+    OkHttp --> Internet[Manga Content Providers & CDNs]
 ```
 
 ---
 
-## Tech Stack and Libraries
+## Tech Stack
 
-| Component | Implementation |
+| Layer | Technologies |
 |---|---|
-| Architecture | MVVM + Clean Architecture + Hilt DI |
-| Language | 100% Kotlin + Modern Coroutines and StateFlow |
+| Architecture | Model-View-ViewModel (MVVM) + Clean Architecture + Hilt DI |
+| Language | Kotlin 2.0 with Coroutines and StateFlow |
 | Networking | OkHttp 5 + Brotli + Conscrypt + JSoup |
 | Image Loading | Coil 3 + Subsampling Scale ImageView (SSIV) |
-| Local Database | Android Jetpack Room (SQLite) + KSP |
-| Extension Sandbox | Dalvik DelegateLastClassLoader + Injekt API |
+| Local Database | Android Jetpack Room (SQLite) with KSP |
+| Extension Sandbox | Parent-First PathClassLoader + Injekt API |
 | Design System | Google Material Design 3 + Dynamic Colors (Monet) |
 
 ---
@@ -81,44 +100,49 @@ graph TD
 
 ### Prerequisites
 - JDK: OpenJDK 17 or 21 (or Android Studio JBR)
-- Android SDK: Build Tools 35.0.0 or higher, Target SDK 34
+- Android SDK: Build Tools 35.0.0, Platform SDK 34
 - Gradle: 9.0 (included via Gradle Wrapper)
 
-### Build Steps
+### Build Commands
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/zeravrix/ZERAVRIX-Phone.git
-   cd ZERAVRIX-Phone
-   ```
+```bash
+git clone https://github.com/zeravrix/ZERAVRIX-Phone.git
+cd ZERAVRIX-Phone
+```
 
-2. Assemble the Release APK:
-   ```bash
-   ./gradlew assembleRelease
-   ```
-   (On Windows: `.\gradlew.bat assembleRelease`)
+2. Assemble the Debug APK:
+```bash
+./gradlew assembleDebug
+```
 
-3. Locate the Output Binary:
-   ```
-   app/build/outputs/apk/release/app-release.apk
-   ```
+3. Assemble the Release APK:
+Configure signing credentials in your untracked local.properties:
+```properties
+signing.key.path=/path/to/your/release.jks
+signing.store.password=YourStorePassword
+signing.key.alias=zeravrix
+signing.key.password=YourKeyPassword
+```
+Then run:
+```bash
+./gradlew assembleRelease
+```
 
 ---
 
 ## Contributing
 
-We welcome pull requests and issues. Please ensure:
-1. All changes adhere to Kotlin coding standards (`./gradlew lint`).
-2. Unit and integration tests pass cleanly (`./gradlew test`).
-3. Commit messages are clear and descriptive.
+Pull requests and issues are welcome. Please ensure:
+1. Code formatting follows Kotlin and Android coding conventions.
+2. Unit tests and assemble tasks pass cleanly.
+3. Commit messages are clear and reference relevant components.
 
 ---
 
 ## License
 
 ZERAVRIX Phone is open-source software licensed under the GNU General Public License v3.0 (GPLv3).
-
----
 
 <div align="center">
   <sub>Built with care by the ZERAVRIX Team • <a href="https://github.com/zeravrix/ZERAVRIX-Phone">github.com/zeravrix/ZERAVRIX-Phone</a></sub>

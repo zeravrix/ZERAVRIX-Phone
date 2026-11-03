@@ -233,6 +233,4 @@ object MihonSourceManager {
             classLoader = javaClass.classLoader!!,
         )
     }
-
-    fun getAllLoaded(): List<LoadedMihonSource> = loadedSourcesMap.values.toList()
 }

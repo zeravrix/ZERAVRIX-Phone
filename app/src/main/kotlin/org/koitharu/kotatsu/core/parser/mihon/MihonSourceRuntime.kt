@@ -77,11 +77,6 @@ data class LoadedMihonSource(
 object MihonSourceRuntime {
     private const val TAG = "MihonRuntime"
 
-    fun loadInstalled(context: Context): List<MihonMangaSource> {
-        MihonSourceManager.initialize(context)
-        return MihonSourceManager.sources.value
-    }
-
     fun installPrivateExtensionFile(context: Context, file: File): Boolean {
         MihonSourceManager.initialize(context)
         val pkgInfo = ExtensionLoader.getArchivePackageInfo(context, file) ?: return false
@@ -108,14 +103,6 @@ object MihonSourceRuntime {
     }
 
     private val iconCache = ConcurrentHashMap<String, Drawable>()
-
-    fun clearIconCache(packageName: String? = null) {
-        if (packageName != null) {
-            iconCache.remove(packageName)
-        } else {
-            iconCache.clear()
-        }
-    }
 
     fun getIcon(context: Context, descriptor: MihonMangaSource): Drawable? =
         getIcon(context, descriptor.packageName)
@@ -249,22 +236,6 @@ object MihonSourceRuntime {
         }
         editor.apply()
         MihonSourceManager.debounceRefresh()
-    }
-
-    fun observeEnabled(context: Context, descriptor: MihonMangaSource, listener: SharedPreferences.OnSharedPreferenceChangeListener) {
-        preferences(context).registerOnSharedPreferenceChangeListener(listener)
-    }
-
-    fun stopObservingEnabled(context: Context, listener: SharedPreferences.OnSharedPreferenceChangeListener) {
-        preferences(context).unregisterOnSharedPreferenceChangeListener(listener)
-    }
-
-    fun normalizeExtensionApiVersion(rawLibVersion: Float, versionName: String?): Double? {
-        val parsed = rawLibVersion.takeUnless { it == 0.0f }
-            ?.toString()
-            ?.toDoubleOrNull()
-        if (parsed != null) return parsed
-        return versionName?.substringBeforeLast('.')?.toDoubleOrNull()
     }
 
     private fun preferences(context: Context) =
