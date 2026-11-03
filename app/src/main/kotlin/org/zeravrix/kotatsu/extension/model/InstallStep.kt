@@ -8,7 +8,12 @@ sealed interface InstallStep {
     data object Installed : InstallStep
     data object Error : InstallStep
 
-    fun isCompleted(): Boolean {
-        return this == Installed || this == Error || this == Idle
-    }
+    fun isFinished(): Boolean = this == Installed || this == Error || this == Idle
+
+    fun isSuccess(): Boolean = this == Installed
+
+    fun isError(): Boolean = this == Error
+
+    @Deprecated("Use isFinished() or isSuccess() explicitly", ReplaceWith("isFinished()"))
+    fun isCompleted(): Boolean = isFinished()
 }

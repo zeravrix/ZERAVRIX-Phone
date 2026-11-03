@@ -3,6 +3,7 @@ package org.zeravrix.kotatsu.extension
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.util.Log
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,16 +26,21 @@ import org.zeravrix.kotatsu.extension.trust.TrustExtension
 import org.zeravrix.kotatsu.extension.util.ExtensionInstallReceiver
 import org.zeravrix.kotatsu.extension.util.ExtensionLoader
 import java.io.File
-import java.util.concurrent.ConcurrentHashMap
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class ExtensionManager(
-    private val context: Context,
-    val trustExtension: TrustExtension = TrustExtension(context),
+@Singleton
+class ExtensionManager @Inject constructor(
+    @ApplicationContext private val context: Context,
+    val trustExtension: TrustExtension,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val initialized = CompletableDeferred<Unit>()
     private val loadMutex = Mutex()
+
+    private val _isInitialized = MutableStateFlow(false)
+    val isInitialized: StateFlow<Boolean> = _isInitialized.asStateFlow()
 
     val installer = ExtensionInstaller(context)
     val storeService = ExtensionStoreService(context)
@@ -146,6 +152,7 @@ class ExtensionManager(
             } catch (e: Exception) {
                 Log.e("ExtensionManager", "Error loading extensions", e)
             } finally {
+                _isInitialized.value = true
                 if (!initialized.isCompleted) {
                     initialized.complete(Unit)
                 }
@@ -198,7 +205,10 @@ class ExtensionManager(
 
         fun getInstance(context: Context): ExtensionManager {
             return instance ?: synchronized(this) {
-                instance ?: ExtensionManager(context.applicationContext).also { instance = it }
+                instance ?: ExtensionManager(
+                    context = context.applicationContext,
+                    trustExtension = TrustExtension(context.applicationContext),
+                ).also { instance = it }
             }
         }
     }

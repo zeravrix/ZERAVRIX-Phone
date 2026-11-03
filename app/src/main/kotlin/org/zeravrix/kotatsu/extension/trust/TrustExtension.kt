@@ -4,12 +4,18 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.content.pm.PackageInfo
 import androidx.core.content.pm.PackageInfoCompat
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.zeravrix.kotatsu.extension.model.ExtensionStore
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class TrustExtension(context: Context) {
+@Singleton
+class TrustExtension @Inject constructor(
+    @ApplicationContext context: Context,
+) {
 
     private val prefs: SharedPreferences =
         context.getSharedPreferences("zeravrix_trusted_extensions", Context.MODE_PRIVATE)
@@ -29,25 +35,29 @@ class TrustExtension(context: Context) {
         stores: List<ExtensionStore> = emptyList(),
         isBundled: Boolean = false,
     ): Boolean {
-        // Auto-trust all installed extensions without requiring manual confirmation
-        return true
+        if (fingerprints.isEmpty()) return false
+        if (isBundled) return true
+        if (fingerprints.any { it in pinnedCertificates }) return true
+        val storeKeys = stores.mapNotNull { it.signingKey.takeIf { k -> k.isNotBlank() && k != "NO_SIGNING_KEY" } }
+        if (fingerprints.any { it in storeKeys }) return true
+
+        val trusted = prefs.getStringSet(KEY_TRUSTED, emptySet()) ?: emptySet()
+        val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
+        val key = "${pkgInfo.packageName}:$versionCode:${fingerprints.last()}"
+        val legacyKey = "${pkgInfo.packageName}:${fingerprints.last()}"
+        return key in trusted || legacyKey in trusted || pkgInfo.packageName in trusted
     }
 
     fun trust(pkgName: String, versionCode: Long, signatureHash: String) {
         val current = prefs.getStringSet(KEY_TRUSTED, emptySet())?.toMutableSet() ?: mutableSetOf()
-        // Remove older entries for this package
         current.removeAll { it.startsWith("$pkgName:") }
-        current.add("${pkgName}:$versionCode:$signatureHash")
+        current.add("$pkgName:$versionCode:$signatureHash")
         prefs.edit().putStringSet(KEY_TRUSTED, current).apply()
         _changes.value += 1
     }
 
     fun trust(pkgName: String, signatureHash: String) {
-        val current = prefs.getStringSet(KEY_TRUSTED, emptySet())?.toMutableSet() ?: mutableSetOf()
-        current.add(pkgName)
-        current.add("$pkgName:0:$signatureHash")
-        prefs.edit().putStringSet(KEY_TRUSTED, current).apply()
-        _changes.value += 1
+        trust(pkgName, 0L, signatureHash)
     }
 
     fun revoke(pkgName: String) {

@@ -13,6 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
+import org.zeravrix.kotatsu.BuildConfig
 import org.zeravrix.kotatsu.extension.dalvik.DelegateLastClassLoaderCompat
 import org.zeravrix.kotatsu.extension.model.ContentWarning
 import org.zeravrix.kotatsu.extension.model.Extension
@@ -34,7 +35,8 @@ object ExtensionLoader {
     private const val METADATA_EXTENSION_LIB = "tachiyomix.extensionLib"
     private const val METADATA_CONTENT_WARNING = "tachiyomix.contentWarning"
 
-    private val SUPPORTED_LIB_VERSIONS = listOf(1.2, 1.3, 1.4, 1.5, 1.6)
+    // Supported Mihon extension library versions (only 1.4 and 1.6)
+    private val SUPPORTED_LIB_VERSIONS = listOf(1.4, 1.6)
 
     @Suppress("DEPRECATION")
     private val PACKAGE_FLAGS = PackageManager.GET_CONFIGURATIONS or
@@ -90,7 +92,6 @@ object ExtensionLoader {
         try {
             copyAndSetReadOnly(file, staged)
             if (!staged.renameTo(target)) {
-                // If direct rename fails, remove target and try rename
                 target.delete()
                 if (!staged.renameTo(target)) {
                     throw IOException("Unable to replace ${target.name}")
@@ -116,10 +117,15 @@ object ExtensionLoader {
     }
 
     /**
-     * Unpacks any bundled asset APKs into the private extension directory.
+     * Unpacks any bundled asset APKs into the private extension directory once per app version.
      * Sets read-only permissions so Android 14+ executes them safely.
      */
     fun unpackBundledExtensions(context: Context) {
+        val prefs = context.getSharedPreferences("bundled_exts", Context.MODE_PRIVATE)
+        val lastUnpackedVersion = prefs.getInt("unpacked_version", 0)
+        if (lastUnpackedVersion >= BuildConfig.VERSION_CODE) {
+            return
+        }
         val assetManager = context.assets
         val assetList = runCatching { assetManager.list(BUNDLED_EXTENSIONS_DIR) }.getOrNull() ?: return
         val extDir = getPrivateExtensionDir(context)
@@ -133,11 +139,11 @@ object ExtensionLoader {
                         input.copyTo(output)
                     }
                 }
-                val pkgInfo = context.packageManager.getPackageArchiveInfo(tempPart.absolutePath, PACKAGE_FLAGS)
+                val pkgInfo = getArchivePackageInfo(context, tempPart)
                 if (pkgInfo != null && isPackageAnExtension(pkgInfo)) {
                     val target = File(extDir, "${pkgInfo.packageName}.$PRIVATE_EXTENSION_EXTENSION")
                     val existingPkg = if (target.exists()) {
-                        context.packageManager.getPackageArchiveInfo(target.absolutePath, PACKAGE_FLAGS)
+                        getArchivePackageInfo(context, target)
                     } else null
 
                     val assetVersion = PackageInfoCompat.getLongVersionCode(pkgInfo)
@@ -157,6 +163,7 @@ object ExtensionLoader {
                 Log.e(TAG, "Failed to unpack bundled asset extension: $assetName", e)
             }
         }
+        prefs.edit().putInt("unpacked_version", BuildConfig.VERSION_CODE).apply()
     }
 
     /**
@@ -192,7 +199,7 @@ object ExtensionLoader {
 
         val sharedExtPkgs = installedPkgs
             .asSequence()
-            .filter { isPackageAnExtension(it, context) }
+            .filter { isPackageAnExtension(it) }
             .map { pkg ->
                 val fullPkg = runCatching {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -238,7 +245,7 @@ object ExtensionLoader {
                     }
                 }
             }
-            ?.filter { isPackageAnExtension(it, context) }
+            ?.filter { isPackageAnExtension(it) }
             ?.map { ExtensionInfo(packageInfo = it, isShared = false) }
             ?.toList()
             .orEmpty()
@@ -381,7 +388,7 @@ object ExtensionLoader {
             ?: pkgName
         val versionName = pkgInfo.versionName
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
-        val signatures = getSignatures(pkgInfo).orEmpty().ifEmpty { listOf("auto_trusted") }
+        val signatures = getSignatures(pkgInfo).orEmpty()
         val store = stores.firstOrNull { it.signingKey in signatures }
 
         val contentWarning = when {
@@ -415,13 +422,27 @@ object ExtensionLoader {
             return notLoaded(Extension.NotLoaded.Reason.Malformed)
         }
 
-        // Validate library version with exact string conversion
+        // Validate library version strictly (only 1.4 and 1.6 accepted)
         val libVersion = metaData.getFloat(METADATA_EXTENSION_LIB)
             .takeUnless { it == 0.0f }
             ?.toString()
             ?.toDoubleOrNull()
             ?: versionName.substringBeforeLast('.').toDoubleOrNull()
-            ?: 1.4
+
+        if (libVersion == null || libVersion !in SUPPORTED_LIB_VERSIONS) {
+            Log.w(TAG, "Unsupported lib version: $libVersion for $pkgName (supported: $SUPPORTED_LIB_VERSIONS)")
+            return notLoaded(Extension.NotLoaded.Reason.UnsupportedLibVersion, libVersion)
+        }
+
+        if (signatures.isEmpty()) {
+            Log.w(TAG, "Package $pkgName is unsigned")
+            return notLoaded(Extension.NotLoaded.Reason.Unsigned, libVersion)
+        }
+
+        if (!trustExtension.isTrusted(pkgInfo, signatures, stores)) {
+            Log.w(TAG, "Extension $pkgName is untrusted")
+            return notLoaded(Extension.NotLoaded.Reason.Untrusted(signatures.last()), libVersion)
+        }
 
         if (!allowNsfw && contentWarning == ContentWarning.NSFW) {
             return notLoaded(Extension.NotLoaded.Reason.Filtered, libVersion)
@@ -489,38 +510,8 @@ object ExtensionLoader {
         )
     }
 
-    fun isPackageAnExtension(pkgInfo: PackageInfo, context: Context? = null): Boolean {
-        if (pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }) return true
-        val pkg = pkgInfo.packageName
-        if (pkg.startsWith("eu.kanade.tachiyomi.extension") ||
-            pkg.startsWith("tachiyomi.extension") ||
-            pkg.startsWith("org.zeravrix.extension") ||
-            pkg.contains(".extension.") ||
-            pkg.endsWith(".extension") ||
-            pkg.contains(".parser.")
-        ) {
-            return true
-        }
-        val appInfo = pkgInfo.applicationInfo
-        val hasMeta = appInfo?.metaData?.containsKey(METADATA_SOURCE_CLASS) == true
-        if (hasMeta) return true
-
-        if (context != null) {
-            val loadedMeta = runCatching {
-                context.packageManager.getApplicationInfo(pkgInfo.packageName, PackageManager.GET_META_DATA).metaData
-            }.getOrNull()
-            if (loadedMeta?.containsKey(METADATA_SOURCE_CLASS) == true) {
-                return true
-            }
-        }
-        val sourceDir = appInfo?.sourceDir
-        if (sourceDir != null) {
-            val fallback = extractMetaDataFallback(sourceDir)
-            if (fallback?.containsKey(METADATA_SOURCE_CLASS) == true) {
-                return true
-            }
-        }
-        return false
+    fun isPackageAnExtension(pkgInfo: PackageInfo): Boolean {
+        return pkgInfo.reqFeatures.orEmpty().any { it.name == EXTENSION_FEATURE }
     }
 
     fun getSignatures(pkgInfo: PackageInfo): List<String>? {
