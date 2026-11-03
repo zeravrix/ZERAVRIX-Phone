@@ -22,6 +22,9 @@
     <string name="refresh_extensions">Refresh</string>
     <string name="repositories">Repositories</string>
     <string name="install_extension_apk">Install extension APK</string>
+    <string name="installing_extension">Installing extension…</string>
+    <string name="extension_installer_channel">Extension installer</string>
+    <string name="enable_unknown_sources">Please allow installing unknown apps for ZERAVRIX to install extensions</string>
     <string name="available_extensions">Available extensions</string>
     <string name="website_updates_channel">ZERAVRIX updates</string>
     <string name="website_updates_channel_description">Notifications about new ZERAVRIX releases on the website</string>

@@ -23,11 +23,6 @@ class TrustExtension @Inject constructor(
     private val _changes = MutableStateFlow(0)
     val changes: StateFlow<Int> = _changes.asStateFlow()
 
-    // Bundled and well-known extension certificate hashes (Keiyoushi, Tachiyomi, ZERAVRIX)
-    private val pinnedCertificates = setOf(
-        "777e090299f01540cb7e7ce7ab536967da510c4d293d207ec25b292e31379435", // Keiyoushi
-        "8434771465e9b7a42ec3e8876c0e7687cf18ff7ab09c4d9b4b0e5ee0d984cfb7", // Official Tachiyomi
-    )
 
     fun isTrusted(
         pkgInfo: PackageInfo,
@@ -72,7 +67,13 @@ class TrustExtension @Inject constructor(
         _changes.value += 1
     }
 
-    private companion object {
+    companion object {
         const val KEY_TRUSTED = "trusted_signatures"
+
+        // Bundled and well-known extension certificate hashes (Keiyoushi, Tachiyomi, ZERAVRIX)
+        val pinnedCertificates: Set<String> = setOf(
+            "777e090299f01540cb7e7ce7ab536967da510c4d293d207ec25b292e31379435", // Keiyoushi
+            "8434771465e9b7a42ec3e8876c0e7687cf18ff7ab09c4d9b4b0e5ee0d984cfb7", // Official Tachiyomi
+        )
     }
 }

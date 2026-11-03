@@ -17,13 +17,17 @@ import okhttp3.Request
 import org.zeravrix.kotatsu.extension.model.ContentWarning
 import org.zeravrix.kotatsu.extension.model.Extension
 import org.zeravrix.kotatsu.extension.model.ExtensionStore
+import uy.kohesive.injekt.Injekt
+import uy.kohesive.injekt.api.get
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.zip.GZIPInputStream
 
 class ExtensionStoreService(
     private val context: Context,
-    private val httpClient: OkHttpClient = OkHttpClient(),
+    private val httpClient: OkHttpClient = runCatching {
+        Injekt.get<eu.kanade.tachiyomi.network.NetworkHelper>().client
+    }.getOrNull() ?: OkHttpClient(),
 ) {
 
     private val preferences: SharedPreferences =

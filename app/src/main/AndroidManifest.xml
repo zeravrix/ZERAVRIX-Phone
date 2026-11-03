@@ -21,6 +21,7 @@
 	<uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
 	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
 	<uses-permission
 		android:name="android.permission.REQUEST_INSTALL_PACKAGES"
 		tools:ignore="RequestInstallPackagesPolicy" />
@@ -1664,6 +1665,15 @@
 			android:name="org.zeravrix.kotatsu.settings.sources.extensions.ExtensionsActivity"
 			android:exported="false"
 			android:label="@string/source_extensions" />
+
+		<service
+			android:name="org.zeravrix.kotatsu.extension.util.ExtensionInstallService"
+			android:exported="false"
+			android:foregroundServiceType="shortService" />
+
+		<receiver
+			android:name="org.zeravrix.kotatsu.extension.installer.ExtensionInstallResultReceiver"
+			android:exported="false" />
 
 	</application>
 
