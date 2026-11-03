@@ -10,23 +10,16 @@ import org.zeravrix.kotatsu.list.ui.adapter.loadingStateAD
 import org.zeravrix.kotatsu.list.ui.model.ListModel
 
 class SourcesCatalogAdapter(
-	sourceListener: OnListItemClickListener<SourceCatalogItem.Source>,
-	extensionListener: OnListItemClickListener<SourceCatalogItem.Extension>,
+	listener: OnListItemClickListener<SourceCatalogItem.Source>,
 ) : BaseListAdapter<ListModel>(), FastScroller.SectionIndexer {
 
 	init {
-		addDelegate(ListItemType.CHAPTER_LIST, sourceCatalogItemSourceAD(sourceListener))
-		addDelegate(ListItemType.EXPLORE_SOURCE_LIST, sourceCatalogItemExtensionAD(extensionListener))
+		addDelegate(ListItemType.CHAPTER_LIST, sourceCatalogItemSourceAD(listener))
 		addDelegate(ListItemType.HINT_EMPTY, sourceCatalogItemHintAD())
 		addDelegate(ListItemType.STATE_LOADING, loadingStateAD())
 	}
 
-			override fun getSectionText(context: Context, position: Int): CharSequence? {
-			return when (val item = items.getOrNull(position)) {
-				is SourceCatalogItem.Source -> item.source.getTitle(context).take(1)
-				is SourceCatalogItem.Extension -> item.sourceName.take(1)
-				else -> null
-			}
-		}
-
+	override fun getSectionText(context: Context, position: Int): CharSequence? {
+		return (items.getOrNull(position) as? SourceCatalogItem.Source)?.source?.getTitle(context)?.take(1)
+	}
 }

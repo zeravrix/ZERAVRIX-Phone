@@ -22,8 +22,8 @@ import org.koitharu.kotatsu.parsers.network.CloudFlareHelper.PROTECTION_CAPTCHA
 @Dao
 abstract class MangaSourcesDao {
 
-	@Query("DELETE FROM sources WHERE source LIKE 'mihon:%'")
-	abstract suspend fun deleteCorruptedMihonSources()
+	@Query("DELETE FROM sources WHERE source LIKE 'mihon:' || :packageName || ':%'")
+	abstract suspend fun deleteByPackage(packageName: String)
 
 	@Query("SELECT * FROM sources ORDER BY pinned DESC, sort_key")
 	abstract suspend fun findAll(): List<MangaSourceEntity>

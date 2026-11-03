@@ -2,38 +2,17 @@ package org.zeravrix.kotatsu.settings.sources.catalog
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import org.zeravrix.kotatsu.R
 import org.zeravrix.kotatsu.list.ui.model.ListModel
-import org.koitharu.kotatsu.parsers.model.MangaSource
+import org.koitharu.kotatsu.parsers.model.MangaParserSource
 
 sealed interface SourceCatalogItem : ListModel {
 
 	data class Source(
-		val source: MangaSource,
-		val isPinned: Boolean = false,
+		val source: MangaParserSource,
 	) : SourceCatalogItem {
 
 		override fun areItemsTheSame(other: ListModel): Boolean {
 			return other is Source && other.source == source
-		}
-	}
-
-	data class Extension(
-		val sourceName: String,
-		val language: String,
-		val extensionName: String,
-		val packageName: String,
-		val versionName: String,
-		val apkUrl: String,
-		@DrawableRes val iconRes: Int = R.drawable.zeravrix_chibi,
-		val iconUrl: String = "",
-		val isInstalling: Boolean = false,
-		val isInstalled: Boolean = false,
-		val isPinned: Boolean = false,
-	) : SourceCatalogItem {
-
-		override fun areItemsTheSame(other: ListModel): Boolean {
-			return other is Extension && other.packageName == packageName && other.sourceName == sourceName && other.language == language
 		}
 	}
 
@@ -48,15 +27,3 @@ sealed interface SourceCatalogItem : ListModel {
 		}
 	}
 }
-
-data class ExtensionSourceCatalogEntry(
-	val sourceName: String = "",
-	val language: String = "",
-	val extensionName: String = "",
-	val packageName: String = "",
-	val apkUrl: String = "",
-	val versionName: String = "",
-	val versionCode: Long = 0L,
-	val nsfw: Int = 0,
-	val iconUrl: String = "",
-)
