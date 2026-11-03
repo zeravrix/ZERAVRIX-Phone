@@ -30,19 +30,39 @@ class WebsiteUpdateWorker(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         runCatching {
-            val request = Request.Builder().url(WEBSITE_URL).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) error("HTTP ${response.code}")
-                val html = response.body?.string().orEmpty()
-                val remoteVersion = RELEASE_PATTERN.matcher(html).let { matcher ->
-                    if (matcher.find()) matcher.group(1) else null
-                } ?: return@use
-                if (VersionId(remoteVersion) <= VersionId(BuildConfig.VERSION_NAME)) return@use
-                val prefs = applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-                if (prefs.getString(KEY_LAST_NOTIFIED, null) == remoteVersion) return@use
-                prefs.edit().putString(KEY_LAST_NOTIFIED, remoteVersion).apply()
-                showNotification(remoteVersion)
+            var remoteVersion: String? = null
+            runCatching {
+                val githubRequest = Request.Builder()
+                    .url(GITHUB_API_URL)
+                    .header("User-Agent", "ZERAVRIX-Phone")
+                    .build()
+                client.newCall(githubRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val json = org.json.JSONObject(response.body?.string().orEmpty())
+                        val tag = json.optString("tag_name").removePrefix("v").trim()
+                        if (tag.isNotBlank()) {
+                            remoteVersion = tag
+                        }
+                    }
+                }
             }
+            if (remoteVersion == null) {
+                val request = Request.Builder().url(WEBSITE_URL).build()
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val html = response.body?.string().orEmpty()
+                        remoteVersion = RELEASE_PATTERN.matcher(html).let { matcher ->
+                            if (matcher.find()) matcher.group(1) else null
+                        }
+                    }
+                }
+            }
+            val version = remoteVersion ?: return@runCatching Result.success()
+            if (VersionId(version) <= VersionId(BuildConfig.VERSION_NAME)) return@runCatching Result.success()
+            val prefs = applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+            if (prefs.getString(KEY_LAST_NOTIFIED, null) == version) return@runCatching Result.success()
+            prefs.edit().putString(KEY_LAST_NOTIFIED, version).apply()
+            showNotification(version)
             Result.success()
         }.getOrElse { Result.retry() }
     }
@@ -58,10 +78,10 @@ class WebsiteUpdateWorker(
                 ).apply { description = applicationContext.getString(R.string.website_updates_channel_description) },
             )
         }
-        val openWebsite = PendingIntent.getActivity(
+        val openUpdate = PendingIntent.getActivity(
             applicationContext,
             4100,
-            Intent(Intent.ACTION_VIEW).setData(android.net.Uri.parse(WEBSITE_URL)),
+            Intent(applicationContext, AppUpdateActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
@@ -69,7 +89,7 @@ class WebsiteUpdateWorker(
             .setContentTitle(applicationContext.getString(R.string.website_update_available))
             .setContentText(applicationContext.getString(R.string.website_update_available_message, remoteVersion))
             .setStyle(NotificationCompat.BigTextStyle().bigText(applicationContext.getString(R.string.website_update_available_message, remoteVersion)))
-            .setContentIntent(openWebsite)
+            .setContentIntent(openUpdate)
             .setAutoCancel(true)
             .build()
         val canNotify = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
@@ -80,6 +100,7 @@ class WebsiteUpdateWorker(
     }
 
     private companion object {
+        const val GITHUB_API_URL = "https://api.github.com/repos/zeravrix/ZERAVRIX-Phone/releases/latest"
         const val WEBSITE_URL = "https://zeravrix.pages.dev/"
         const val PREFERENCES_NAME = "zeravrix_website_updates"
         const val KEY_LAST_NOTIFIED = "last_notified_version"

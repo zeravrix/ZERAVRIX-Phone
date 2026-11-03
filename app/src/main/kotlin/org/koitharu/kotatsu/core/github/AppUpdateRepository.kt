@@ -53,15 +53,17 @@ class AppUpdateRepository @Inject constructor(
 		val jsonArray = okHttp.newCall(request.build()).await().parseJsonArray()
 		return jsonArray.mapJSONNotNull { json ->
 			val asset = json.optJSONArray("assets")?.find { jo ->
-				jo.optString("content_type") == CONTENT_TYPE_APK
+				jo.optString("content_type") == CONTENT_TYPE_APK || jo.optString("name").endsWith(".apk", ignoreCase = true)
 			} ?: return@mapJSONNotNull null
+			val tagName = json.optString("tag_name").removePrefix("v").trim()
+			val versionName = if (tagName.isNotBlank()) tagName else json.getString("name").removePrefix("v").trim()
 			AppVersion(
 				id = json.getLong("id"),
 				url = json.getString("html_url"),
-				name = json.getString("name").removePrefix("v"),
+				name = versionName,
 				apkSize = asset.getLong("size"),
 				apkUrl = asset.getString("browser_download_url"),
-				description = json.getString("body"),
+				description = json.optString("body"),
 			)
 		}
 	}
