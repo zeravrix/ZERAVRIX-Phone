@@ -45,6 +45,15 @@
     <string name="trust">Trust</string>
     <string name="uninstall">Uninstall</string>
     <string name="untrusted">Untrusted</string>
+    <string name="incompatible">Incompatible</string>
+    <string name="malformed">Malformed</string>
+    <string name="unsigned">Unsigned</string>
+    <string name="extension_incompatible_lib">Incompatible lib version %s (requires 1.4 or 1.6)</string>
+    <string name="extension_untrusted_desc">Untrusted signature: %s</string>
+    <string name="extension_malformed_desc">Malformed extension package</string>
+    <string name="extension_unsigned_desc">Package is not cryptographically signed</string>
+    <string name="extension_load_failed_desc">Error: %s</string>
+    <string name="extension_filtered_desc">Filtered by content rating</string>
     <string name="manage_repositories">Manage repositories</string>
     <string name="install_from_file">Install from file</string>
     <string name="extension_sources">%1$d sources</string>

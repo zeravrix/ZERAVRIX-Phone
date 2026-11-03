@@ -195,7 +195,7 @@ class ExtensionsViewModel @Inject constructor(
         viewModelScope.launch {
             extensionManager.installer.downloadAndInstall(ext).collect { step ->
                 activeSteps.update { it + (pkg to step) }
-                if (step.isCompleted()) {
+                if (step.isFinished()) {
                     activeSteps.update { it - pkg }
                 }
             }
@@ -217,7 +217,10 @@ class ExtensionsViewModel @Inject constructor(
     }
 
     fun uninstall(pkgName: String) {
-        extensionManager.uninstallExtension(pkgName)
+        viewModelScope.launch {
+            extensionManager.uninstallExtension(pkgName)
+            sourcesRepository.deleteSourcesByPackage(pkgName)
+        }
     }
 
     fun installFromUri(uri: Uri) {
@@ -253,9 +256,18 @@ class ExtensionsViewModel @Inject constructor(
 
     fun toggleExtensionPin(pkgName: String, pin: Boolean) {
         launchJob(kotlinx.coroutines.Dispatchers.IO) {
-            val sources = sourcesRepository.getEnabledSources()
-                .filterIsInstance<MihonMangaSource>()
-                .filter { it.packageName == pkgName }
+            val loadedSources = extensionManager.loadedExtensionsFlow.value
+                .find { it.pkgName == pkgName }
+                ?.sources
+                ?.map { MihonMangaSource(pkgName, it.id, it.name, it.lang) }
+                .orEmpty()
+            val sources = if (loadedSources.isNotEmpty()) {
+                loadedSources
+            } else {
+                sourcesRepository.getEnabledSources()
+                    .filterIsInstance<MihonMangaSource>()
+                    .filter { it.packageName == pkgName }
+            }
             if (sources.isNotEmpty()) {
                 sourcesRepository.setIsPinned(sources, pin)
             }

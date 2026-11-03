@@ -60,31 +60,56 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
 
         // Icon
         if (extension is Extension.Installed) {
-            val localIcon = MihonSourceRuntime.getIcon(requireContext(), extension.pkgName)
-            if (localIcon != null) {
-                binding.imageViewIcon.setImageDrawable(localIcon)
-            } else {
-                binding.imageViewIcon.setImageAsync(R.drawable.zeravrix_chibi)
-            }
+            val src = (extension as? Extension.Loaded)?.sources?.firstOrNull()?.let {
+                MihonMangaSource(extension.pkgName, it.id, it.name, it.lang)
+            } ?: MihonMangaSource(extension.pkgName, 0L, extension.name, extension.lang.orEmpty())
+            binding.imageViewIcon.setImageAsync(src)
         } else if (extension is Extension.Available && extension.iconUrl.isNotBlank()) {
             binding.imageViewIcon.setImageAsync(extension.iconUrl)
         } else {
             binding.imageViewIcon.setImageAsync(R.drawable.zeravrix_chibi)
         }
 
-        // Trust status
-        if (extension is Extension.NotLoaded && extension.reason is Extension.NotLoaded.Reason.Untrusted) {
-            val reason = extension.reason as Extension.NotLoaded.Reason.Untrusted
-            binding.textViewStatus.isVisible = true
-            binding.textViewStatus.text = getString(R.string.untrusted_extension_warning)
-            binding.buttonTrust.isVisible = true
-            binding.buttonTrust.setOnClickListener {
-                extensionManager.trustExtension.trust(extension.pkgName, reason.signatureHash)
-                dismiss()
+        // Trust status and NotLoaded reasons
+        when (val reason = (extension as? Extension.NotLoaded)?.reason) {
+            is Extension.NotLoaded.Reason.Untrusted -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.untrusted_extension_warning) + "\n\nHash: " + reason.signatureHash
+                binding.buttonTrust.isVisible = true
+                binding.buttonTrust.setOnClickListener {
+                    extensionManager.trustExtension.trust(extension.pkgName, reason.signatureHash)
+                    dismiss()
+                }
             }
-        } else {
-            binding.textViewStatus.isVisible = false
-            binding.buttonTrust.isVisible = false
+            is Extension.NotLoaded.Reason.UnsupportedLibVersion -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.extension_incompatible_lib, extension.libVersion?.toString() ?: "unknown")
+                binding.buttonTrust.isVisible = false
+            }
+            is Extension.NotLoaded.Reason.Malformed -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.extension_malformed_desc)
+                binding.buttonTrust.isVisible = false
+            }
+            is Extension.NotLoaded.Reason.Unsigned -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.extension_unsigned_desc)
+                binding.buttonTrust.isVisible = false
+            }
+            is Extension.NotLoaded.Reason.Failed -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.extension_load_failed_desc, reason.message)
+                binding.buttonTrust.isVisible = false
+            }
+            is Extension.NotLoaded.Reason.Filtered -> {
+                binding.textViewStatus.isVisible = true
+                binding.textViewStatus.text = getString(R.string.extension_filtered_desc)
+                binding.buttonTrust.isVisible = false
+            }
+            else -> {
+                binding.textViewStatus.isVisible = false
+                binding.buttonTrust.isVisible = false
+            }
         }
 
         // Sources list
@@ -143,7 +168,12 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
                     .setTitle(R.string.uninstall)
                     .setMessage(getString(R.string.uninstall_extension_confirm, extension.name))
                     .setPositiveButton(R.string.uninstall) { _, _ ->
-                        extensionManager.uninstallExtension(extension.pkgName)
+                        val extActivity = activity as? ExtensionsActivity
+                        if (extActivity != null) {
+                            extActivity.viewModel.uninstall(extension.pkgName)
+                        } else {
+                            extensionManager.uninstallExtension(extension.pkgName)
+                        }
                         Toast.makeText(requireContext(), R.string.extension_uninstalled, Toast.LENGTH_SHORT).show()
                         dismiss()
                     }

@@ -3,6 +3,7 @@ package org.zeravrix.kotatsu.settings.sources.extensions
 import androidx.core.view.isVisible
 import com.hannesdorfmann.adapterdelegates4.dsl.adapterDelegateViewBinding
 import org.zeravrix.kotatsu.R
+import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
 import org.zeravrix.kotatsu.core.parser.mihon.MihonSourceRuntime
 import org.zeravrix.kotatsu.databinding.ItemExtensionBinding
 import org.zeravrix.kotatsu.extension.model.ContentWarning
@@ -41,26 +42,56 @@ fun extensionItemAD(
 
         binding.textViewTitle.text = ext.name
 
-        val countSources = when (ext) {
-            is Extension.Loaded -> ext.sources.size
-            is Extension.Available -> ext.sources.size
-            else -> 0
+        if (ext is Extension.NotLoaded) {
+            binding.textViewDescription.text = when (val reason = ext.reason) {
+                is Extension.NotLoaded.Reason.UnsupportedLibVersion -> {
+                    context.getString(R.string.extension_incompatible_lib, ext.libVersion?.toString() ?: "unknown")
+                }
+                is Extension.NotLoaded.Reason.Untrusted -> {
+                    context.getString(R.string.extension_untrusted_desc, reason.signatureHash.take(12) + "…")
+                }
+                is Extension.NotLoaded.Reason.Malformed -> {
+                    context.getString(R.string.extension_malformed_desc)
+                }
+                is Extension.NotLoaded.Reason.Unsigned -> {
+                    context.getString(R.string.extension_unsigned_desc)
+                }
+                is Extension.NotLoaded.Reason.Failed -> {
+                    context.getString(R.string.extension_load_failed_desc, reason.message)
+                }
+                is Extension.NotLoaded.Reason.Filtered -> {
+                    context.getString(R.string.extension_filtered_desc)
+                }
+            }
+        } else {
+            val countSources = when (ext) {
+                is Extension.Loaded -> ext.sources.size
+                is Extension.Available -> ext.sources.size
+                else -> 0
+            }
+            val langStr = ext.lang?.uppercase() ?: "ALL"
+            val sourcesDesc = if (countSources > 0) {
+                context.getString(R.string.extension_sources, countSources)
+            } else ""
+            binding.textViewDescription.text = listOfNotNull(
+                langStr,
+                "v${ext.versionName}",
+                sourcesDesc.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
         }
-        val langStr = ext.lang?.uppercase() ?: "ALL"
-        val sourcesDesc = if (countSources > 0) {
-            context.getString(R.string.extension_sources, countSources)
-        } else ""
-        binding.textViewDescription.text = listOfNotNull(
-            langStr,
-            "v${ext.versionName}",
-            sourcesDesc.takeIf { it.isNotBlank() },
-        ).joinToString(" · ")
 
-        // Badges: NSFW or Untrusted or Update
+        // Badges: NotLoaded (Untrusted, Incompatible, Malformed, etc.), Update, or NSFW
         when {
-            ext is Extension.NotLoaded && ext.reason is Extension.NotLoaded.Reason.Untrusted -> {
+            ext is Extension.NotLoaded -> {
                 binding.textViewBadge.isVisible = true
-                binding.textViewBadge.text = context.getString(R.string.untrusted)
+                binding.textViewBadge.text = when (ext.reason) {
+                    is Extension.NotLoaded.Reason.Untrusted -> context.getString(R.string.untrusted)
+                    is Extension.NotLoaded.Reason.UnsupportedLibVersion -> context.getString(R.string.incompatible)
+                    is Extension.NotLoaded.Reason.Malformed -> context.getString(R.string.malformed)
+                    is Extension.NotLoaded.Reason.Unsigned -> context.getString(R.string.unsigned)
+                    is Extension.NotLoaded.Reason.Failed -> context.getString(R.string.error)
+                    is Extension.NotLoaded.Reason.Filtered -> context.getString(R.string.filter)
+                }
             }
             ext is Extension.Installed && ext.hasUpdate -> {
                 binding.textViewBadge.isVisible = true
@@ -75,20 +106,14 @@ fun extensionItemAD(
             }
         }
 
-        // Icon loading
+        // Icon loading through FaviconFetcher / Coil
         if (ext is Extension.Installed) {
-            val localIcon = MihonSourceRuntime.getIcon(context, ext.pkgName)
-            if (localIcon != null) {
-                binding.imageViewIcon.setImageDrawable(localIcon)
-            } else {
-                binding.imageViewIcon.setImageAsync(R.drawable.zeravrix_chibi)
-            }
-        } else if (ext is Extension.Available) {
-            if (ext.iconUrl.isNotBlank()) {
-                binding.imageViewIcon.setImageAsync(ext.iconUrl)
-            } else {
-                binding.imageViewIcon.setImageAsync(R.drawable.zeravrix_chibi)
-            }
+            val src = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.let {
+                MihonMangaSource(ext.pkgName, it.id, it.name, it.lang)
+            } ?: MihonMangaSource(ext.pkgName, 0L, ext.name, ext.lang.orEmpty())
+            binding.imageViewIcon.setImageAsync(src)
+        } else if (ext is Extension.Available && ext.iconUrl.isNotBlank()) {
+            binding.imageViewIcon.setImageAsync(ext.iconUrl)
         } else {
             binding.imageViewIcon.setImageAsync(R.drawable.zeravrix_chibi)
         }

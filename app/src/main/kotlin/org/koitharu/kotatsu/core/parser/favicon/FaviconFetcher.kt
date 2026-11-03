@@ -125,7 +125,7 @@ class FaviconFetcher(
 				dataSource = DataSource.DISK,
 			)
 		} else {
-			ImageFetchResult(
+			imageLoader.fetch(R.drawable.zeravrix_chibi, options) ?: ImageFetchResult(
 				image = ColorImage(Color.WHITE),
 				isSampled = false,
 				dataSource = DataSource.MEMORY,

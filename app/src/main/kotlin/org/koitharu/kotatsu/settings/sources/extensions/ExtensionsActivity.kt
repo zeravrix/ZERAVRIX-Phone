@@ -47,7 +47,7 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
     @Inject
     lateinit var coil: ImageLoader
 
-    private val viewModel by viewModels<ExtensionsViewModel>()
+    internal val viewModel by viewModels<ExtensionsViewModel>()
 
     private val openFileLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -64,22 +64,12 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
 
         val adapter = ExtensionsAdapter(
             onItemClick = { ext ->
-                if (ext is Extension.Installed) {
+                if (ext is Extension.Loaded) {
                     val src = resolveSourceForExtension(ext)
                     if (src != null) {
                         router.openList(src, null, null)
                     } else {
-                        lifecycleScope.launch {
-                            viewModel.extensionManager.loadExtensions()
-                            val resolved = resolveSourceForExtension(ext) ?: MihonMangaSource(
-                                packageName = ext.pkgName,
-                                sourceId = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.id ?: 0L,
-                                sourceName = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.name ?: ext.name,
-                                language = (ext as? Extension.Loaded)?.sources?.firstOrNull()?.lang ?: ext.lang.orEmpty(),
-                                isNsfw = ext.contentWarning == ContentWarning.NSFW,
-                            )
-                            router.openList(resolved, null, null)
-                        }
+                        ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
                     }
                 } else {
                     ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
@@ -97,7 +87,7 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
                 when {
                     ext is Extension.Available -> viewModel.install(ext)
                     ext is Extension.Installed && ext.hasUpdate -> viewModel.update(ext)
-                    ext is Extension.NotLoaded -> viewModel.trust(ext)
+                    ext is Extension.NotLoaded && ext.reason is Extension.NotLoaded.Reason.Untrusted -> viewModel.trust(ext)
                 }
             },
         )

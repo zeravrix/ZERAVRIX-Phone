@@ -383,6 +383,10 @@ class MangaSourcesRepository @Inject constructor(
 		}
 	}
 
+	suspend fun deleteSourcesByPackage(packageName: String) {
+		dao.deleteByPackage(packageName)
+	}
+
 	private suspend fun setSourcesEnabledImpl(sources: Collection<MangaSource>, isEnabled: Boolean) {
 		if (sources.size == 1) { // fast path
 			dao.setEnabled(sources.first().name, isEnabled)
