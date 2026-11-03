@@ -50,7 +50,7 @@ class MihonMangaRepository(
 
     override suspend fun getList(offset: Int, order: SortOrder?, filter: MangaListFilter?): List<Manga> =
         withContext(Dispatchers.IO) {
-            val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+            val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
             val effectiveSourceId = loaded.descriptor.sourceId
             val pageSize = if (estimatedPageSize > 0) estimatedPageSize else PAGE_SIZE
             val page = when {
@@ -104,7 +104,7 @@ class MihonMangaRepository(
         }
 
     override suspend fun getDetailsImpl(manga: Manga): Manga = withContext(Dispatchers.IO) {
-        val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
 
         val update = SourceGate.execute(effectiveSourceId) {
@@ -122,7 +122,7 @@ class MihonMangaRepository(
     }
 
     override suspend fun getPagesImpl(chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
-        val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
 
         val mihonPages = SourceGate.execute(effectiveSourceId) {
@@ -145,7 +145,7 @@ class MihonMangaRepository(
             return@withContext preview
         }
 
-        val loaded = MihonSourceManager.getLoadedOrAwait(context, source)
+        val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
             ?: return@withContext page.url

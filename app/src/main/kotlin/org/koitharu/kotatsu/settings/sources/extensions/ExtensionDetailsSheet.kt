@@ -112,6 +112,8 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
                     context.theme.resolveAttribute(android.R.attr.selectableItemBackground, typedValue, true)
                     setBackgroundResource(typedValue.resourceId)
                     val realSource = (extension as? Extension.Loaded)?.sources?.find { it.name == name }
+                        ?: org.zeravrix.kotatsu.extension.ExtensionManager.getInstance(requireContext())
+                            .getLoadedExtensions().find { it.pkgName == extension.pkgName }?.sources?.find { it.name == name }
                     val mihonSource = if (realSource != null) {
                         MihonMangaSource(
                             packageName = extension.pkgName,
@@ -120,10 +122,7 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
                             language = realSource.lang,
                         )
                     } else {
-                        org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-                            .find { it.packageName == extension.pkgName && (it.sourceName == name || it.name == name) }
-                            ?: org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.sources.value
-                                .find { it.packageName == extension.pkgName }
+                        MihonMangaSource.fromKey("mihon:${extension.pkgName}:0")
                     }
                     if (mihonSource != null) {
                         setOnClickListener {

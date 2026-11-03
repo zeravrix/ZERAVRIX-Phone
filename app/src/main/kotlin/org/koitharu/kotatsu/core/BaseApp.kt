@@ -27,7 +27,6 @@ import org.zeravrix.kotatsu.core.os.RomCompat
 import org.zeravrix.kotatsu.core.prefs.AppSettings
 import org.zeravrix.kotatsu.core.util.ext.processLifecycleScope
 import org.zeravrix.kotatsu.core.parser.mihon.MihonRuntimeModule
-import org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager
 import org.zeravrix.kotatsu.local.data.LocalStorageChanges
 import org.zeravrix.kotatsu.local.data.index.LocalMangaIndex
 import org.zeravrix.kotatsu.local.domain.model.LocalManga
@@ -77,7 +76,6 @@ open class BaseApp : Application(), Configuration.Provider {
 		PlatformRegistry.applicationContext = this // TODO replace with OkHttp.initialize
 		runCatching {
 			MihonRuntimeModule.install(this)
-			MihonSourceManager.initialize(this)
 		}.onFailure { Log.e("MihonRuntime", "Failed to initialize extension runtime", it) }
 
 		AppCompatDelegate.setDefaultNightMode(settings.theme)

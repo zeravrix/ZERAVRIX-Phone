@@ -16,7 +16,7 @@
     <string name="remote_sources">Manga sources</string>
     <string name="source_extensions">Source extensions</string>
     <string name="source_extensions_summary">Add and install compatible source APK extensions</string>
-    <string name="source_extensions_description">Add an HTTPS extension repository or install a source APK from your device. ZERAVRIX accepts Mihon-style index files, but installed APKs must advertise a compatible external source provider contract.</string>
+    <string name="source_extensions_description">Add an HTTPS extension repository or install a source APK from your device. ZERAVRIX connects to universal manhwa, manga, manhua, and comics sources.</string>
     <string name="extension_repository_url_hint">HTTPS extension repository index URL</string>
     <string name="add_repository">Add repository</string>
     <string name="refresh_extensions">Refresh</string>

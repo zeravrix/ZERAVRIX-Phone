@@ -1,24 +1,24 @@
 package org.zeravrix.kotatsu.core.parser.mihon
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.graphics.drawable.Drawable
-import android.util.Log
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
 import okhttp3.Headers
 import okhttp3.Request
 import org.koitharu.kotatsu.parsers.model.MangaSource
-import org.zeravrix.kotatsu.extension.model.Extension
+import org.zeravrix.kotatsu.extension.ExtensionManager
+import org.zeravrix.kotatsu.extension.model.ContentWarning
+import org.zeravrix.kotatsu.extension.model.StubSource
 import org.zeravrix.kotatsu.extension.util.ExtensionLoader
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-/** Stable descriptor for one executable source exported by a Mihon extension APK. */
+/** Stable descriptor for one executable source exported by an extension APK. */
 data class MihonMangaSource(
     val packageName: String,
     val sourceId: Long,
-    val sourceName: String = "Mihon source $sourceId",
+    val sourceName: String = if (sourceId != 0L) "Source $sourceId" else "Universal Extension Source",
     val language: String = "",
     val isNsfw: Boolean = false,
 ) : MangaSource {
@@ -27,6 +27,16 @@ data class MihonMangaSource(
     init {
         remember(this)
     }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MihonMangaSource) return false
+        return name == other.name
+    }
+
+    override fun hashCode(): Int = name.hashCode()
+
+    override fun toString(): String = sourceName
 
     companion object {
         private val metadata = ConcurrentHashMap<String, MihonMangaSource>()
@@ -39,17 +49,11 @@ data class MihonMangaSource(
             val pkg = parts[0]
             val parsedId = parts[1].toLongOrNull() ?: return null
 
-            // Prioritize finding a loaded source with real non-zero ID
-            val byPkg = MihonSourceManager.sources.value.find { it.packageName == pkg && it.sourceId != 0L }
-                ?: packageToSource[pkg]?.takeIf { it.sourceId != 0L }
-                ?: metadata.values.find { it.packageName == pkg && it.sourceId != 0L }
+            metadata[key]?.let { return it }
 
+            val byPkg = packageToSource[pkg]?.takeIf { it.sourceId == parsedId || parsedId == 0L }
             if (byPkg != null) {
                 return byPkg
-            }
-
-            if (parsedId != 0L) {
-                metadata[key]?.let { return it }
             }
 
             return MihonMangaSource(pkg, parsedId)
@@ -75,31 +79,52 @@ data class LoadedMihonSource(
 )
 
 object MihonSourceRuntime {
-    private const val TAG = "MihonRuntime"
 
-    fun installPrivateExtensionFile(context: Context, file: File): Boolean {
-        MihonSourceManager.initialize(context)
-        val pkgInfo = ExtensionLoader.getArchivePackageInfo(context, file) ?: return false
-        return try {
-            MihonSourceManager.extensionManager?.installPrivateExtensionFile(file, pkgInfo)
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to install private extension", e)
-            false
-        }
-    }
-
-    fun uninstallPrivateExtension(context: Context, packageName: String) {
-        MihonSourceManager.initialize(context)
-        MihonSourceManager.extensionManager?.uninstallExtension(packageName)
-    }
-
-    /**
-     * Non-blocking getter. Returns real loaded source or a StubSource fallback.
-     */
     fun getLoaded(context: Context, descriptor: MihonMangaSource): LoadedMihonSource {
-        MihonSourceManager.initialize(context)
-        return MihonSourceManager.get(descriptor)
+        val mgr = ExtensionManager.getInstance(context)
+        val ext = mgr.getLoadedExtensions().find { it.pkgName == descriptor.packageName }
+        val src = if (descriptor.sourceId != 0L) {
+            ext?.sources?.find { it.id == descriptor.sourceId }
+        } else {
+            ext?.sources?.firstOrNull()
+        }
+
+        if (ext != null && src != null) {
+            val updatedDescriptor = descriptor.copy(
+                sourceId = src.id,
+                sourceName = src.name,
+                language = src.lang,
+                isNsfw = ext.contentWarning == ContentWarning.NSFW,
+            )
+            MihonMangaSource.remember(updatedDescriptor)
+            return LoadedMihonSource(
+                descriptor = updatedDescriptor,
+                source = src,
+                classLoader = ext.classLoader ?: context.classLoader,
+            )
+        }
+
+        val stub = StubSource(
+            id = descriptor.sourceId,
+            lang = descriptor.language,
+            name = descriptor.sourceName,
+        )
+        return LoadedMihonSource(
+            descriptor = descriptor,
+            source = stub,
+            classLoader = context.classLoader,
+        )
+    }
+
+    suspend fun getLoadedOrAwait(context: Context, descriptor: MihonMangaSource): LoadedMihonSource {
+        val mgr = ExtensionManager.getInstance(context)
+        mgr.awaitInitialization()
+        val loaded = getLoaded(context, descriptor)
+        if (loaded.source !is StubSource) {
+            return loaded
+        }
+        mgr.loadExtensions()
+        return getLoaded(context, descriptor)
     }
 
     private val iconCache = ConcurrentHashMap<String, Drawable>()
@@ -169,78 +194,4 @@ object MihonSourceRuntime {
         }
         return builder.build()
     }
-
-    fun isEnabled(context: Context, descriptor: MihonMangaSource): Boolean {
-        val prefs = preferences(context)
-        val key = enabledKey(descriptor)
-        if (prefs.contains(key)) return prefs.getBoolean(key, true)
-        val legacyKey = "enabled:${descriptor.name}"
-        if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
-        val pkgKey = "source_enabled_pkg_${descriptor.packageName}"
-        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
-        return true
-    }
-
-    fun isPackageEnabled(context: Context, packageName: String): Boolean {
-        val prefs = preferences(context)
-        val pkgKey = "source_enabled_pkg_$packageName"
-        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
-        for (key in prefs.all.keys) {
-            if (key.startsWith("source_enabled_mihon:$packageName:") && prefs.getBoolean(key, true) == false) {
-                return false
-            }
-        }
-        return true
-    }
-
-    fun setEnabled(context: Context, descriptor: MihonMangaSource, enabled: Boolean) {
-        preferences(context).edit()
-            .putBoolean(enabledKey(descriptor), enabled)
-            .putBoolean("enabled:${descriptor.name}", enabled)
-            .putBoolean("source_enabled_pkg_${descriptor.packageName}", enabled)
-            .apply()
-        MihonSourceManager.debounceRefresh()
-    }
-
-    fun isPinned(context: Context, descriptor: MihonMangaSource): Boolean {
-        return isPackagePinned(context, descriptor.packageName, descriptor.name)
-    }
-
-    fun isPackagePinned(context: Context, packageName: String, sourceName: String? = null): Boolean {
-        val prefs = preferences(context)
-        if (sourceName != null) {
-            val key = "source_pinned_$sourceName"
-            if (prefs.contains(key)) return prefs.getBoolean(key, true)
-            val legacyKey = "pinned:$sourceName"
-            if (prefs.contains(legacyKey)) return prefs.getBoolean(legacyKey, true)
-        }
-        val pkgKey = "source_pinned_pkg_$packageName"
-        if (prefs.contains(pkgKey)) return prefs.getBoolean(pkgKey, true)
-        return true
-    }
-
-    fun setPinned(context: Context, descriptor: MihonMangaSource, pinned: Boolean) {
-        setPackagePinned(context, descriptor.packageName, descriptor.name, pinned)
-    }
-
-    fun setPackagePinned(context: Context, packageName: String, sourceName: String? = null, pinned: Boolean) {
-        val editor = preferences(context).edit()
-            .putBoolean("source_pinned_pkg_$packageName", pinned)
-        if (sourceName != null) {
-            editor.putBoolean("source_pinned_$sourceName", pinned)
-            editor.putBoolean("pinned:$sourceName", pinned)
-        }
-        for (source in MihonSourceManager.sources.value.filter { it.packageName == packageName }) {
-            editor.putBoolean(pinnedKey(source), pinned)
-            editor.putBoolean("pinned:${source.name}", pinned)
-        }
-        editor.apply()
-        MihonSourceManager.debounceRefresh()
-    }
-
-    private fun preferences(context: Context) =
-        context.getSharedPreferences("mihon_runtime", Context.MODE_PRIVATE)
-
-    private fun enabledKey(descriptor: MihonMangaSource) = "source_enabled_${descriptor.name}"
-    private fun pinnedKey(descriptor: MihonMangaSource) = "source_pinned_${descriptor.name}"
 }

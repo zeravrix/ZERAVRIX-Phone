@@ -18,7 +18,6 @@ import org.zeravrix.kotatsu.core.prefs.AppSettings
 import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
 import org.zeravrix.kotatsu.core.model.getTitle
 import org.zeravrix.kotatsu.core.model.isNsfw
-import org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager
 import org.zeravrix.kotatsu.explore.data.MangaSourcesRepository
 import org.koitharu.kotatsu.parsers.model.ContentType
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -137,11 +136,11 @@ class MangaSearchRepository @Inject constructor(
 			return emptyList()
 		}
 		val skipNsfw = settings.isNsfwContentDisabled
-				val dynamicSources = MihonSourceManager.sources.value
+		val dynamicSources = sourcesRepository.enabledSourcesSnapshot.filterIsInstance<MihonMangaSource>()
 		val sources = (sourcesRepository.allMangaSources + dynamicSources)
 			.filter { x ->
-					(!x.isNsfw() || !skipNsfw) && x.getTitle(context).contains(query, ignoreCase = true)
-				}
+				(!x.isNsfw() || !skipNsfw) && x.getTitle(context).contains(query, ignoreCase = true)
+			}
 
 		return if (limit == 0) {
 			sources

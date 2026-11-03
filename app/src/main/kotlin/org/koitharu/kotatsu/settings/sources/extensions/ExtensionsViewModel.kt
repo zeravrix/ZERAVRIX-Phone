@@ -14,8 +14,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.zeravrix.kotatsu.R
+import org.zeravrix.kotatsu.core.parser.mihon.MihonMangaSource
 import org.zeravrix.kotatsu.core.prefs.AppSettings
 import org.zeravrix.kotatsu.core.ui.BaseViewModel
+import org.zeravrix.kotatsu.explore.data.MangaSourcesRepository
 import org.zeravrix.kotatsu.extension.ExtensionManager
 import org.zeravrix.kotatsu.extension.model.ContentWarning
 import org.zeravrix.kotatsu.extension.model.Extension
@@ -36,9 +38,9 @@ enum class FilterTab {
 class ExtensionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: AppSettings,
+    val sourcesRepository: MangaSourcesRepository,
+    val extensionManager: ExtensionManager,
 ) : BaseViewModel() {
-
-    val extensionManager: ExtensionManager = ExtensionManager.getInstance(context)
 
     val filterTab = MutableStateFlow(FilterTab.ALL)
     val searchQuery = MutableStateFlow("")
@@ -242,5 +244,21 @@ class ExtensionsViewModel @Inject constructor(
             refreshCatalog()
         }
         return removed
+    }
+
+    suspend fun isExtensionPinned(pkgName: String): Boolean {
+        val pinned = sourcesRepository.getPinnedSources()
+        return pinned.filterIsInstance<MihonMangaSource>().any { it.packageName == pkgName }
+    }
+
+    fun toggleExtensionPin(pkgName: String, pin: Boolean) {
+        launchJob(kotlinx.coroutines.Dispatchers.IO) {
+            val sources = sourcesRepository.getEnabledSources()
+                .filterIsInstance<MihonMangaSource>()
+                .filter { it.packageName == pkgName }
+            if (sources.isNotEmpty()) {
+                sourcesRepository.setIsPinned(sources, pin)
+            }
+        }
     }
 }

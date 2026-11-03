@@ -83,7 +83,6 @@ class ExtensionInstaller(
                 stepFlow.value = InstallStep.Installing
                 ExtensionLoader.installPrivateExtensionFile(context, tmpFile, packageInfo)
                 ExtensionInstallReceiver.notifyAdded(context, pkgName)
-                org.zeravrix.kotatsu.core.parser.mihon.MihonSourceManager.refreshNow(context)
 
                 // Launch system package installer prompt so user can approve the APK install
                 try {

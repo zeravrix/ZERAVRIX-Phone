@@ -39,19 +39,108 @@ import org.koitharu.kotatsu.parsers.util.mapToSet
 import java.util.Collections
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import org.zeravrix.kotatsu.extension.ExtensionManager
+import org.zeravrix.kotatsu.extension.model.ContentWarning
+import org.zeravrix.kotatsu.extension.model.Extension
 
 @Singleton
 class MangaSourcesRepository @Inject constructor(
 	@LocalizedAppContext private val context: Context,
 	private val db: MangaDatabase,
 	private val settings: AppSettings,
+	private val extensionManager: ExtensionManager = ExtensionManager.getInstance(context),
 ) {
 
+	private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+	private val enabledSourcesCache = AtomicReference<List<MangaSource>>(emptyList())
 	private val isNewSourcesAssimilated = AtomicBoolean(false)
 	private val dao: MangaSourcesDao
 		get() = db.getSourcesDao()
+
+	val enabledSourcesSnapshot: List<MangaSource>
+		get() = enabledSourcesCache.get()
+
+	init {
+		repositoryScope.launch {
+			extensionManager.loadedExtensionsFlow.collectLatest { loaded ->
+				syncMihonSources(loaded)
+			}
+		}
+	}
+
+	private suspend fun syncMihonSources(loaded: List<Extension.Loaded>) {
+		val descriptors = ArrayList<MihonMangaSource>()
+
+		for (ext in loaded) {
+			for (source in ext.sources) {
+				val desc = MihonMangaSource(
+					packageName = ext.pkgName,
+					sourceId = source.id,
+					sourceName = source.name,
+					language = source.lang,
+					isNsfw = ext.contentWarning == ContentWarning.NSFW,
+				)
+				MihonMangaSource.remember(desc)
+				descriptors.add(desc)
+			}
+		}
+
+		val existingEntities = dao.findAll()
+		val existingKeys = existingEntities.mapTo(HashSet()) { it.source }
+		var maxSortKey = dao.getMaxSortKey()
+
+		val toInsert = ArrayList<MangaSourceEntity>()
+		for (desc in descriptors) {
+			if (desc.name !in existingKeys) {
+				toInsert.add(
+					MangaSourceEntity(
+						source = desc.name,
+						isEnabled = true,
+						sortKey = ++maxSortKey,
+						addedIn = BuildConfig.VERSION_CODE,
+						lastUsedAt = 0,
+						isPinned = false,
+						cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
+					)
+				)
+			}
+		}
+		if (toInsert.isNotEmpty()) {
+			dao.insertIfAbsent(toInsert)
+		}
+
+		if (extensionManager.isInitialized.value) {
+			val activePackages = HashSet<String>()
+			for (ext in loaded) {
+				activePackages.add(ext.pkgName)
+			}
+			for (ext in extensionManager.getNotLoadedExtensions()) {
+				activePackages.add(ext.pkgName)
+			}
+
+			val installedPackagesInDb = existingEntities
+				.filter { it.source.startsWith("mihon:") }
+				.mapNotNull {
+					val parts = it.source.removePrefix("mihon:").split(':', limit = 2)
+					if (parts.isNotEmpty()) parts[0] else null
+				}
+				.toSet()
+
+			for (pkg in installedPackagesInDb) {
+				if (pkg !in activePackages) {
+					dao.deleteByPackage(pkg)
+				}
+			}
+		}
+	}
 
 	val allMangaSources: Set<MangaParserSource> = Collections.unmodifiableSet(
 		EnumSet.noneOf<MangaParserSource>(MangaParserSource::class.java).also {
@@ -68,6 +157,7 @@ class MangaSourcesRepository @Inject constructor(
 				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 				list.addAll(enabled)
+				enabledSourcesCache.set(list.map { it.mangaSource })
 				list
 			}
 	}
@@ -184,6 +274,7 @@ class MangaSourcesRepository @Inject constructor(
 			val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 			list.addAll(enabled)
+			enabledSourcesCache.set(list.map { it.mangaSource })
 			list
 		}
 

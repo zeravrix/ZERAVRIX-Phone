@@ -8,13 +8,13 @@
 
 [![Official Website](https://img.shields.io/badge/Website-zeravrix.pages.dev-0066FF.svg?style=flat)](https://zeravrix.pages.dev/)
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84.svg?style=flat&logo=android)](https://github.com/zeravrix/ZERAVRIX-Phone)
-[![Engine](https://img.shields.io/badge/Engine-Native%20%2B%20Mihon%20Extensions-blue.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone)
+[![Engine](https://img.shields.io/badge/Engine-Native%20%2B%20Universal%20Extensions-blue.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone)
 [![License](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat)](LICENSE)
 [![Latest Release](https://img.shields.io/badge/Release-v2.0.0-purple.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone/releases)
 
 <br/>
 
-ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source parsers with the boundless ecosystem of Tachiyomi and Mihon APK source extensions, wrapped in a Material Design 3 interface.
+ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source parsers with the boundless ecosystem of universal manhwa, manga, manhua, and comics source extensions, wrapped in a Material Design 3 interface.
 
 [Official Website](https://zeravrix.pages.dev/) • [Download Latest APK](https://github.com/zeravrix/ZERAVRIX-Phone/releases) • [Specifications](#specifications) • [Architecture](#architecture) • [Building](#building-from-source)
 
@@ -30,7 +30,7 @@ ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source pa
 | Code Namespace | org.zeravrix.kotatsu |
 | Minimum Android | Android 8.0 (API 26) |
 | Target Android | Android 14 (API 34) |
-| Supported Extensions | Mihon and Tachiyomi APKs (Lib 1.4 and 1.6) |
+| Supported Extensions | Universal Manhwa, Manga, Manhua, and Comics APKs (Lib 1.4 and 1.6) |
 | Primary Database | SQLite via Android Jetpack Room |
 | Networking Engine | OkHttp 5 + Conscrypt + Brotli Compression |
 | Image Pipeline | Coil 3 + Subsampling Scale ImageView |
@@ -40,8 +40,8 @@ ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source pa
 
 ## Key Capabilities
 
-### Universal Extension Runtime
-- Full Mihon Compatibility: Browse, install, trust, and run thousands of community source APKs directly.
+### Universal Manhwa / Manga / Manhua / Comics Source Extension Runtime
+- Universal Extension Compatibility: Browse, install, trust, and run thousands of community source APKs directly.
 - Single Source of Truth: All native and extension sources integrate into the Room database, guaranteeing instant search, pinning, reordering, and usage tracking.
 - Contextual Source Management: Explore sources directly, pin to Explore tab, or uninstall seamlessly.
 - Direct Repository Management: Connect HTTPS extension repositories with automated index updates.
@@ -69,9 +69,9 @@ graph TD
     SourcesRepo --> Factory[MangaRepository Factory]
     
     Factory --> NativeParsers[Native Parsers Repository]
-    Factory --> MihonRepo[MihonMangaRepository]
+    Factory --> ExtRepo[Universal Extension Repository]
     
-    MihonRepo --> SourceGate[SourceGate: 429 Throttle & Limiter]
+    ExtRepo --> SourceGate[SourceGate: 429 Throttle & Limiter]
     SourceGate --> ExtLoader[ExtensionLoader: PathClassLoader]
     ExtLoader --> ExtAPK[Extension APK Sandbox]
     
