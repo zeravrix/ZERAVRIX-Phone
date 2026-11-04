@@ -27,12 +27,11 @@ ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source pa
 | Specification | Value |
 |---|---|
 | Application ID | org.zeravrix.android |
-| Code Namespace | org.zeravrix.kotatsu |
 | Minimum Android | Android 8.0 (API 26) |
 | Target Android | Android 14 (API 34) |
 | Supported Extensions | Universal Manhwa, Manga, Manhua, and Comics APKs (Lib 1.4 and 1.6) |
 | Primary Database | SQLite via Android Jetpack Room |
-| Networking Engine | OkHttp 5 + Conscrypt + Brotli Compression |
+| Networking Engine | OkHttp 5 + Conscrypt + Brotli and Zstandard (zstd) Compression |
 | Image Pipeline | Coil 3 + Subsampling Scale ImageView |
 | In-App Updates | Anonymous GitHub Releases API Integration |
 
@@ -49,7 +48,7 @@ ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source pa
 ### Immersive Reader Engine
 - Adaptive Reading Modes: Continuous Webtoon vertical scroll with zero gap, Left-to-Right, Right-to-Left, and Dual-Page landscape viewing.
 - Resilient Downloads: Multi-threaded background chapter downloads with pause, resume, and storage volume selection.
-- Brotli Compression Pipeline: Full unstripped Brotli and OkHttp network pipeline for rapid image delivery and CDN compatibility.
+- Brotli and Zstandard Compression Pipeline: Full unstripped Brotli, Zstandard (zstd), and OkHttp network pipeline for high-speed image delivery and CDN compatibility.
 - Smart Image Processing: Dynamic split-image rendering, border cropping, and night reading color adjustments.
 
 ### Privacy and Security
@@ -76,7 +75,7 @@ graph TD
     ExtLoader --> ExtAPK[Extension APK Sandbox]
     
     ExtAPK --> Injekt[Injekt DI & NetworkHelper]
-    Injekt --> OkHttp[Shared OkHttp 5 & Brotli Engine]
+    Injekt --> OkHttp[Shared OkHttp 5, Brotli & Zstandard Engine]
     OkHttp --> Internet[Manga Content Providers & CDNs]
 ```
 
@@ -88,7 +87,7 @@ graph TD
 |---|---|
 | Architecture | Model-View-ViewModel (MVVM) + Clean Architecture + Hilt DI |
 | Language | Kotlin 2.0 with Coroutines and StateFlow |
-| Networking | OkHttp 5 + Brotli + Conscrypt + JSoup |
+| Networking | OkHttp 5 + Brotli + Zstandard (zstd) + Conscrypt + JSoup |
 | Image Loading | Coil 3 + Subsampling Scale ImageView (SSIV) |
 | Local Database | Android Jetpack Room (SQLite) with KSP |
 | Extension Sandbox | Parent-First PathClassLoader + Injekt API |

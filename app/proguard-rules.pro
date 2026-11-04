@@ -51,6 +51,13 @@
 -keep interface okhttp3.** { *; }
 -keep class okhttp3.brotli.** { *; }
 -keep interface okhttp3.brotli.** { *; }
+-keep class okhttp3.zstd.** { *; }
+-keep interface okhttp3.zstd.** { *; }
+-keep class com.github.luben.zstd.** { *; }
+-keep class io.github.airgapit.zstd.** { *; }
+-dontwarn okhttp3.zstd.**
+-dontwarn com.github.luben.zstd.**
+-dontwarn io.github.airgapit.zstd.**
 -dontwarn okhttp3.**
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.brotli.dec.**

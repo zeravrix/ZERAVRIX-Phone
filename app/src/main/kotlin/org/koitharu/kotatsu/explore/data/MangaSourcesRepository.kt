@@ -77,6 +77,7 @@ class MangaSourcesRepository @Inject constructor(
 	}
 
 	private suspend fun syncMihonSources(loaded: List<Extension.Loaded>) {
+		dao.deleteDummySources()
 		val descriptors = ArrayList<MihonMangaSource>()
 
 		for (ext in loaded) {
@@ -158,8 +159,9 @@ class MangaSourcesRepository @Inject constructor(
 		return dao.findAll(!settings.isAllSourcesEnabled, order).toSources(settings.isNsfwContentDisabled, order)
 			.let { enabled ->
 				val external = getExternalSources()
+				val pinnedKeys = dao.findAllPinned().mapToSet { it.source }
 				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
-				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = it.name in pinnedKeys) }
 				list.addAll(enabled)
 				enabledSourcesCache.set(list.map { it.mangaSource })
 				list
@@ -275,8 +277,9 @@ class MangaSourcesRepository @Inject constructor(
 	}.flattenLatest()
 		.onStart { assimilateNewSources() }
 		.combine(observeExternalSources()) { enabled, external ->
+			val pinnedKeys = dao.findAllPinned().mapToSet { it.source }
 			val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
-			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = it.name in pinnedKeys) }
 			list.addAll(enabled)
 			enabledSourcesCache.set(list.map { it.mangaSource })
 			list
@@ -379,6 +382,11 @@ class MangaSourcesRepository @Inject constructor(
 		return ReversibleHandle {
 			setSourcesPinnedImpl(sources, !isPinned)
 		}
+	}
+
+	suspend fun setExtensionPackagePinned(packageName: String, isPinned: Boolean) {
+		dao.deleteDummySources()
+		dao.setPinnedForPackage(packageName, isPinned)
 	}
 
 	suspend fun trackUsage(source: MangaSource) {
@@ -485,8 +493,12 @@ class MangaSourcesRepository @Inject constructor(
 	): MutableList<MangaSourceInfo> {
 		val isAllEnabled = settings.isAllSourcesEnabled
 		val result = ArrayList<MangaSourceInfo>(size)
+		val seen = HashSet<String>()
 		for (entity in this) {
 			val source = entity.source.toMangaSourceOrNull() ?: continue
+			if (!seen.add(source.name)) {
+				continue
+			}
 			if (skipNsfwSources && source.isNsfw()) {
 				continue
 			}

@@ -49,9 +49,11 @@ data class MihonMangaSource(
             val pkg = parts[0]
             val parsedId = parts[1].toLongOrNull() ?: return null
 
+            if (parsedId == 0L) return null
+
             metadata[key]?.let { return it }
 
-            val byPkg = packageToSource[pkg]?.takeIf { it.sourceId == parsedId || parsedId == 0L }
+            val byPkg = packageToSource[pkg]?.takeIf { it.sourceId == parsedId }
             if (byPkg != null) {
                 return byPkg
             }

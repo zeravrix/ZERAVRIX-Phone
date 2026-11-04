@@ -274,19 +274,18 @@ class ExtensionsViewModel @Inject constructor(
                 ?.sources
                 ?.map { MihonMangaSource(pkgName, it.id, it.name, it.lang) }
                 .orEmpty()
-            val sources = if (loadedSources.isNotEmpty()) {
-                loadedSources
+            if (loadedSources.isNotEmpty()) {
+                sourcesRepository.setIsPinned(loadedSources, pin)
             } else {
                 val enabled = sourcesRepository.getEnabledSources()
                     .filterIsInstance<MihonMangaSource>()
                     .filter { it.packageName == pkgName }
                 if (enabled.isNotEmpty()) {
-                    enabled
+                    sourcesRepository.setIsPinned(enabled, pin)
                 } else {
-                    listOf(MihonMangaSource(pkgName, 0L))
+                    sourcesRepository.setExtensionPackagePinned(pkgName, pin)
                 }
             }
-            sourcesRepository.setIsPinned(sources, pin)
         }
     }
 }

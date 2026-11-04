@@ -58,11 +58,25 @@ abstract class MangaSourcesDao {
 	@Query("UPDATE sources SET used_at = :value WHERE source = :source")
 	abstract suspend fun setLastUsed(source: String, value: Long)
 
+	@Query("DELETE FROM sources WHERE source LIKE 'mihon:%:0'")
+	abstract suspend fun deleteDummySources()
+
+	@Query("UPDATE sources SET pinned = :isPinned WHERE source LIKE 'mihon:' || :packageName || ':%'")
+	abstract suspend fun setPinnedForPackage(packageName: String, isPinned: Boolean): Int
+
 	@Query("UPDATE sources SET pinned = :isPinned WHERE source = :source")
 	protected abstract suspend fun updateIsPinned(source: String, isPinned: Boolean): Int
 
 	@Transaction
 	open suspend fun setPinned(source: String, isPinned: Boolean) {
+		deleteDummySources()
+		if (source.startsWith("mihon:")) {
+			val parts = source.removePrefix("mihon:").split(':', limit = 2)
+			if (parts.isNotEmpty()) {
+				val pkg = parts[0]
+				setPinnedForPackage(pkg, isPinned)
+			}
+		}
 		if (updateIsPinned(source, isPinned) == 0) {
 			val entity = MangaSourceEntity(
 				source = source,
