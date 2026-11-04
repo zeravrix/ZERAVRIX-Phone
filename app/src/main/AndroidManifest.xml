@@ -1669,7 +1669,7 @@
 		<service
 			android:name="org.zeravrix.kotatsu.extension.util.ExtensionInstallService"
 			android:exported="false"
-			android:foregroundServiceType="shortService" />
+			android:foregroundServiceType="shortService|dataSync" />
 
 		<receiver
 			android:name="org.zeravrix.kotatsu.extension.installer.ExtensionInstallResultReceiver"

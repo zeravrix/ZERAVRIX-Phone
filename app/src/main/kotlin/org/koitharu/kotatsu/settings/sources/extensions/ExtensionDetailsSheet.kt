@@ -44,7 +44,9 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
         savedInstanceState: Bundle?,
     ) {
         super.onViewBindingCreated(binding, savedInstanceState)
-        val extensionManager = ExtensionManager.getInstance(requireContext())
+        val extActivity = activity as? ExtensionsActivity
+        val extensionManager = extActivity?.viewModel?.extensionManager
+            ?: ExtensionManager.getInstance(requireContext())
 
         val extension = extensionManager.getLoadedExtensions().find { it.pkgName == pkgName }
             ?: extensionManager.getNotLoadedExtensions().find { it.pkgName == pkgName }
@@ -77,7 +79,11 @@ class ExtensionDetailsSheet : BaseAdaptiveSheet<SheetExtensionDetailsBinding>() 
                 binding.textViewStatus.text = getString(R.string.untrusted_extension_warning) + "\n\nHash: " + reason.signatureHash
                 binding.buttonTrust.isVisible = true
                 binding.buttonTrust.setOnClickListener {
-                    extensionManager.trustExtension.trust(extension.pkgName, reason.signatureHash)
+                    if (extActivity != null && extension is Extension.NotLoaded) {
+                        extActivity.viewModel.trust(extension)
+                    } else {
+                        extensionManager.trustExtension.trust(extension.pkgName, extension.versionCode, reason.signatureHash)
+                    }
                     dismiss()
                 }
             }

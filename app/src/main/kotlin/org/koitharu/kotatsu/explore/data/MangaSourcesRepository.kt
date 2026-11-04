@@ -81,15 +81,19 @@ class MangaSourcesRepository @Inject constructor(
 
 		for (ext in loaded) {
 			for (source in ext.sources) {
-				val desc = MihonMangaSource(
-					packageName = ext.pkgName,
-					sourceId = source.id,
-					sourceName = source.name,
-					language = source.lang,
-					isNsfw = ext.contentWarning == ContentWarning.NSFW,
-				)
-				MihonMangaSource.remember(desc)
-				descriptors.add(desc)
+				try {
+					val desc = MihonMangaSource(
+						packageName = ext.pkgName,
+						sourceId = source.id,
+						sourceName = source.name,
+						language = source.lang,
+						isNsfw = ext.contentWarning == ContentWarning.NSFW,
+					)
+					MihonMangaSource.remember(desc)
+					descriptors.add(desc)
+				} catch (e: Throwable) {
+					android.util.Log.e("MangaSourcesRepository", "Error creating descriptor for ${ext.pkgName}", e)
+				}
 			}
 		}
 

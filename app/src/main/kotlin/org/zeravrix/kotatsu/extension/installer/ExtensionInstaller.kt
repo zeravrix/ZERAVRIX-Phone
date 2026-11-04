@@ -90,7 +90,7 @@ class ExtensionInstaller(
             return stepFlow.asStateFlow()
         }
 
-        ExtensionInstallService.start(context)
+        runCatching { ExtensionInstallService.start(context) }
 
         val job = scope.launch {
             val tmpFile = File(context.cacheDir, "ext_${pkgName}.apk")
@@ -119,15 +119,17 @@ class ExtensionInstaller(
                 val packageInfo = ExtensionLoader.getArchivePackageInfo(context, tmpFile)
                     ?: throw IllegalStateException("Invalid extension APK archive")
 
-                // Verify signature against store key
+                // Verify signature against store key or trusted keys
                 val signatures = ExtensionLoader.getSignatures(packageInfo).orEmpty()
                 val storeKey = extension.store.signingKey
-                val isStoreSignatureValid = storeKey.isNotBlank() && storeKey != "NO_SIGNING_KEY" && storeKey in signatures
+                val isStoreSignatureValid = storeKey.isNotBlank() && storeKey != "NO_SIGNING_KEY" &&
+                    signatures.any { it.equals(storeKey, ignoreCase = true) }
                 val isPinnedTrusted = TrustExtension.pinnedCertificates.any { pinned ->
                     signatures.any { it.equals(pinned, ignoreCase = true) }
                 }
+                val isAlreadyTrusted = TrustExtension(context).isTrusted(packageInfo, signatures, listOf(extension.store))
 
-                if (!isStoreSignatureValid && !isPinnedTrusted) {
+                if (!isStoreSignatureValid && !isPinnedTrusted && !isAlreadyTrusted) {
                     tmpFile.delete()
                     throw SecurityException("Extension signature is untrusted or does not match store key for ${extension.store.name}")
                 }
@@ -148,7 +150,7 @@ class ExtensionInstaller(
                     tmpFile.delete()
                 }
                 if (activeJobs.size <= 1) {
-                    ExtensionInstallService.stop(context)
+                    runCatching { ExtensionInstallService.stop(context) }
                 }
             }
         }
@@ -157,7 +159,6 @@ class ExtensionInstaller(
 
         return stepFlow.asStateFlow().onCompletion {
             activeJobs.remove(pkgName)
-            job.cancel()
         }
     }
 
@@ -225,6 +226,7 @@ class ExtensionInstaller(
             }
 
             val intent = Intent(context, ExtensionInstallResultReceiver::class.java).apply {
+                `package` = context.packageName
                 action = ExtensionInstallResultReceiver.ACTION_INSTALL_RESULT
                 putExtra(ExtensionInstallResultReceiver.EXTRA_PACKAGE_NAME, packageName)
                 putExtra(ExtensionInstallResultReceiver.EXTRA_SESSION_ID, sessionId)

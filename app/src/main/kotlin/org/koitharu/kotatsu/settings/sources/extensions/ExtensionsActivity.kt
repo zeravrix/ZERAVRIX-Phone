@@ -64,16 +64,7 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
 
         val adapter = ExtensionsAdapter(
             onItemClick = { ext ->
-                if (ext is Extension.Loaded) {
-                    val src = resolveSourceForExtension(ext)
-                    if (src != null) {
-                        router.openList(src, null, null)
-                    } else {
-                        ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
-                    }
-                } else {
-                    ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
-                }
+                ExtensionDetailsSheet.show(supportFragmentManager, ext.pkgName)
             },
             onItemLongClick = { ext, view ->
                 if (ext is Extension.Installed) {

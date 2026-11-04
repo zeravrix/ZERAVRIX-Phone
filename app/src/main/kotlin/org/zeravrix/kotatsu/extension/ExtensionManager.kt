@@ -64,6 +64,7 @@ class ExtensionManager @Inject constructor(
     private val stores = mutableListOf<ExtensionStore>()
 
     init {
+        instance = this
         scope.launch {
             loadExtensions()
             ExtensionInstallReceiver(InstallationListener(), scope, trustExtension).register(context)

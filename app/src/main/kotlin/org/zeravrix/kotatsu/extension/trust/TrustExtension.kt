@@ -32,21 +32,34 @@ class TrustExtension @Inject constructor(
     ): Boolean {
         if (fingerprints.isEmpty()) return false
         if (isBundled) return true
-        if (fingerprints.any { it in pinnedCertificates }) return true
+        if (fingerprints.any { fp -> pinnedCertificates.any { it.equals(fp, ignoreCase = true) } }) return true
         val storeKeys = stores.mapNotNull { it.signingKey.takeIf { k -> k.isNotBlank() && k != "NO_SIGNING_KEY" } }
-        if (fingerprints.any { it in storeKeys }) return true
+        if (fingerprints.any { fp -> storeKeys.any { it.equals(fp, ignoreCase = true) } }) return true
 
         val trusted = prefs.getStringSet(KEY_TRUSTED, emptySet()) ?: emptySet()
+        if (pkgInfo.packageName in trusted) return true
+
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
         val key = "${pkgInfo.packageName}:$versionCode:${fingerprints.last()}"
         val legacyKey = "${pkgInfo.packageName}:${fingerprints.last()}"
-        return key in trusted || legacyKey in trusted || pkgInfo.packageName in trusted
+        val zeroKey = "${pkgInfo.packageName}:0:${fingerprints.last()}"
+
+        return key in trusted ||
+            legacyKey in trusted ||
+            zeroKey in trusted ||
+            trusted.any { entry ->
+                entry == pkgInfo.packageName ||
+                (entry.startsWith("${pkgInfo.packageName}:") && fingerprints.any { fp -> entry.endsWith(":$fp", ignoreCase = true) })
+            }
     }
 
     fun trust(pkgName: String, versionCode: Long, signatureHash: String) {
         val current = prefs.getStringSet(KEY_TRUSTED, emptySet())?.toMutableSet() ?: mutableSetOf()
-        current.removeAll { it.startsWith("$pkgName:") }
+        current.removeAll { it.startsWith("$pkgName:") || it == pkgName }
         current.add("$pkgName:$versionCode:$signatureHash")
+        current.add("$pkgName:$signatureHash")
+        current.add("$pkgName:0:$signatureHash")
+        current.add(pkgName)
         prefs.edit().putStringSet(KEY_TRUSTED, current).apply()
         _changes.value += 1
     }

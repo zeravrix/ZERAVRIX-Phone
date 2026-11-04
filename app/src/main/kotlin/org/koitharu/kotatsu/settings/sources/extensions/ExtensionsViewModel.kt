@@ -2,9 +2,11 @@ package org.zeravrix.kotatsu.settings.sources.extensions
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -193,11 +195,19 @@ class ExtensionsViewModel @Inject constructor(
     fun install(ext: Extension.Available) {
         val pkg = ext.pkgName
         viewModelScope.launch {
-            extensionManager.installer.downloadAndInstall(ext).collect { step ->
-                activeSteps.update { it + (pkg to step) }
-                if (step.isFinished()) {
-                    activeSteps.update { it - pkg }
+            try {
+                extensionManager.installer.downloadAndInstall(ext).collect { step ->
+                    activeSteps.update { it + (pkg to step) }
+                    if (step.isFinished()) {
+                        activeSteps.update { it - pkg }
+                    }
                 }
+            } catch (e: CancellationException) {
+                activeSteps.update { it - pkg }
+                throw e
+            } catch (e: Throwable) {
+                Log.e("ExtensionsViewModel", "Failed to install extension $pkg", e)
+                activeSteps.update { it - pkg }
             }
         }
     }
@@ -212,7 +222,10 @@ class ExtensionsViewModel @Inject constructor(
         val hash = (ext.reason as? Extension.NotLoaded.Reason.Untrusted)?.signatureHash
             ?: ext.signatures.firstOrNull()
         if (hash != null) {
-            extensionManager.trustExtension.trust(ext.pkgName, hash)
+            extensionManager.trustExtension.trust(ext.pkgName, ext.versionCode, hash)
+            viewModelScope.launch {
+                extensionManager.loadExtensions()
+            }
         }
     }
 
