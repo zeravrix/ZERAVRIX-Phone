@@ -1,13 +1,5 @@
--optimizationpasses 8
+-dontoptimize
 -dontobfuscate
--assumenosideeffects class kotlin.jvm.internal.Intrinsics {
-	public static void checkExpressionValueIsNotNull(...);
-	public static void checkNotNullExpressionValue(...);
-	public static void checkReturnedValueIsNotNull(...);
-	public static void checkFieldIsNotNull(...);
-	public static void checkParameterIsNotNull(...);
-	public static void checkNotNullParameter(...);
-}
 
 -dontwarn okhttp3.internal.platform.**
 -dontwarn org.conscrypt.**
@@ -22,8 +14,6 @@
 -keep class org.koitharu.kotatsu.core.exceptions.* { *; }
 -keep class org.koitharu.kotatsu.core.prefs.ScreenshotsPolicy { *; }
 -keep class org.koitharu.kotatsu.backups.ui.periodical.PeriodicalBackupSettingsFragment { *; }
--keep class org.jsoup.parser.Tag
--keep class org.jsoup.internal.StringUtil
 
 # Mihon host startup and source registry are referenced directly and through APK reflection.
 -keep class org.zeravrix.kotatsu.core.parser.mihon.MihonRuntimeModule { *; }
@@ -37,14 +27,24 @@
 -dontwarn tachiyomi.i18n.**
 
 # Public ABI consumed by separately compiled Mihon extension APKs.
--keep class eu.kanade.tachiyomi.source.** { *; }
--keep class eu.kanade.tachiyomi.network.** { *; }
--keep class tachiyomi.core.common.preference.** { *; }
+-keep class eu.kanade.tachiyomi.** { *; }
+-keep interface eu.kanade.tachiyomi.** { *; }
+-keep class tachiyomi.** { *; }
+-keep interface tachiyomi.** { *; }
 -keep class uy.kohesive.injekt.** { *; }
+-keep interface uy.kohesive.injekt.** { *; }
 
-# Optional Mihon JavaScript/serialization integrations not packaged by the minimal host.
--dontwarn app.cash.quickjs.**
--dontwarn kotlinx.serialization.json.okio.**
+# Keep entire Kotlin standard library and runtime used by extension APKs
+-keep class kotlin.** { *; }
+-keep interface kotlin.** { *; }
+-keep class kotlinx.** { *; }
+-keep interface kotlinx.** { *; }
+-keep class kotlin.time.** { *; }
+-keep interface kotlin.time.** { *; }
+
+# Jsoup HTML parsing for extensions
+-keep class org.jsoup.** { *; }
+-keep interface org.jsoup.** { *; }
 
 # OkHttp and related dependencies for dynamically loaded extensions
 -keep class okhttp3.** { *; }
@@ -59,5 +59,21 @@
 -keep interface okio.** { *; }
 -keep class rx.** { *; }
 -keep interface rx.** { *; }
+-keep class androidx.preference.** { *; }
+-keep interface androidx.preference.** { *; }
+
+# Optional Mihon JavaScript/serialization integrations not packaged by the minimal host.
+-dontwarn app.cash.quickjs.**
+-dontwarn kotlinx.serialization.json.okio.**
+-dontwarn com.hippo.unifile.UniFile
+-dontwarn net.greypanther.natsort.CaseInsensitiveSimpleNaturalComparator
+-dontwarn tachiyomi.decoder.**
+-dontwarn nucleus.view.NucleusActionBarActivity
+
+# JSON and Serialization commonly referenced by extensions
+-keep class com.google.gson.** { *; }
+-keep interface com.google.gson.** { *; }
+-dontwarn com.google.gson.**
+
 
 

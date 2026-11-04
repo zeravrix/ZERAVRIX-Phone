@@ -264,7 +264,7 @@ class ExtensionsViewModel @Inject constructor(
 
     suspend fun isExtensionPinned(pkgName: String): Boolean {
         val pinned = sourcesRepository.getPinnedSources()
-        return pinned.filterIsInstance<MihonMangaSource>().any { it.packageName == pkgName }
+        return pinned.any { (it as? MihonMangaSource)?.packageName == pkgName || it.name.startsWith("mihon:$pkgName:") }
     }
 
     fun toggleExtensionPin(pkgName: String, pin: Boolean) {
@@ -277,13 +277,16 @@ class ExtensionsViewModel @Inject constructor(
             val sources = if (loadedSources.isNotEmpty()) {
                 loadedSources
             } else {
-                sourcesRepository.getEnabledSources()
+                val enabled = sourcesRepository.getEnabledSources()
                     .filterIsInstance<MihonMangaSource>()
                     .filter { it.packageName == pkgName }
+                if (enabled.isNotEmpty()) {
+                    enabled
+                } else {
+                    listOf(MihonMangaSource(pkgName, 0L))
+                }
             }
-            if (sources.isNotEmpty()) {
-                sourcesRepository.setIsPinned(sources, pin)
-            }
+            sourcesRepository.setIsPinned(sources, pin)
         }
     }
 }
