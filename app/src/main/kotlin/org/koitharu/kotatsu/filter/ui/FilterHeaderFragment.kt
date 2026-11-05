@@ -34,8 +34,8 @@ class FilterHeaderFragment : BaseFragment<FragmentFilterHeaderBinding>(), ChipsV
     @Inject
     lateinit var filterHeaderProducer: FilterHeaderProducer
 
-    private val filter: FilterCoordinator
-        get() = (requireActivity() as FilterCoordinator.Owner).filterCoordinator
+    private val filter: FilterCoordinator?
+        get() = runCatching { (requireActivity() as? FilterCoordinator.Owner)?.filterCoordinator }.getOrNull()
 
     override fun onCreateViewBinding(inflater: LayoutInflater, container: ViewGroup?): FragmentFilterHeaderBinding {
         return FragmentFilterHeaderBinding.inflate(inflater, container, false)
@@ -45,20 +45,24 @@ class FilterHeaderFragment : BaseFragment<FragmentFilterHeaderBinding>(), ChipsV
         super.onViewBindingCreated(binding, savedInstanceState)
         binding.chipsTags.onChipClickListener = this
         binding.chipsTags.onChipCloseClickListener = this
-        filterHeaderProducer.observeHeader(filter)
-            .flowOn(Dispatchers.Default)
-            .observe(viewLifecycleOwner, ::onDataChanged)
+        val currentFilter = filter
+        if (currentFilter != null) {
+            filterHeaderProducer.observeHeader(currentFilter)
+                .flowOn(Dispatchers.Default)
+                .observe(viewLifecycleOwner, ::onDataChanged)
+        }
     }
 
     override fun onApplyWindowInsets(v: View, insets: WindowInsetsCompat): WindowInsetsCompat = insets
 
     override fun onChipClick(chip: Chip, data: Any?) {
+        val f = filter ?: return
         when (data) {
-            is MangaTag -> filter.toggleTag(data, !chip.isChecked)
+            is MangaTag -> f.toggleTag(data, !chip.isChecked)
             is PersistableFilter -> if (chip.isChecked) {
-                filter.reset()
+                f.reset()
             } else {
-                filter.setAdjusted(data.filter)
+                f.setAdjusted(data.filter)
             }
 
             is String -> Unit
@@ -67,20 +71,21 @@ class FilterHeaderFragment : BaseFragment<FragmentFilterHeaderBinding>(), ChipsV
     }
 
     override fun onChipCloseClick(chip: Chip, data: Any?) {
+        val f = filter ?: return
         when (data) {
-            is String -> if (data == filter.snapshot().listFilter.author) {
-                filter.setAuthor(null)
+            is String -> if (data == f.snapshot().listFilter.author) {
+                f.setAuthor(null)
             } else {
-                filter.setQuery(null)
+                f.setQuery(null)
             }
 
-            is ContentRating -> filter.toggleContentRating(data, false)
-            is Demographic -> filter.toggleDemographic(data, false)
-            is ContentType -> filter.toggleContentType(data, false)
-            is MangaState -> filter.toggleState(data, false)
-            is Locale -> filter.setLocale(null)
-            is Int -> filter.setYear(YEAR_UNKNOWN)
-            is IntRange -> filter.setYearRange(YEAR_UNKNOWN, YEAR_UNKNOWN)
+            is ContentRating -> f.toggleContentRating(data, false)
+            is Demographic -> f.toggleDemographic(data, false)
+            is ContentType -> f.toggleContentType(data, false)
+            is MangaState -> f.toggleState(data, false)
+            is Locale -> f.setLocale(null)
+            is Int -> f.setYear(YEAR_UNKNOWN)
+            is IntRange -> f.setYearRange(YEAR_UNKNOWN, YEAR_UNKNOWN)
         }
     }
 

@@ -62,7 +62,46 @@ abstract class MangaSourcesDao {
 	abstract suspend fun deleteDummySources()
 
 	@Query("UPDATE sources SET pinned = :isPinned WHERE source LIKE 'mihon:' || :packageName || ':%'")
-	abstract suspend fun setPinnedForPackage(packageName: String, isPinned: Boolean): Int
+	protected abstract suspend fun updatePinnedForPackage(packageName: String, isPinned: Boolean): Int
+
+	@Transaction
+	open suspend fun setPinnedForPackage(packageName: String, isPinned: Boolean): Int {
+		val count = updatePinnedForPackage(packageName, isPinned)
+		if (count == 0) {
+			val entity = MangaSourceEntity(
+				source = "mihon:$packageName:0",
+				isEnabled = true,
+				sortKey = getMaxSortKey() + 1,
+				addedIn = BuildConfig.VERSION_CODE,
+				lastUsedAt = 0,
+				isPinned = isPinned,
+				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
+			)
+			upsert(entity)
+		}
+		return count
+	}
+
+	@Query("UPDATE sources SET enabled = :isEnabled WHERE source LIKE 'mihon:' || :packageName || ':%'")
+	protected abstract suspend fun updateEnabledForPackage(packageName: String, isEnabled: Boolean): Int
+
+	@Transaction
+	open suspend fun setEnabledForPackage(packageName: String, isEnabled: Boolean): Int {
+		val count = updateEnabledForPackage(packageName, isEnabled)
+		if (count == 0) {
+			val entity = MangaSourceEntity(
+				source = "mihon:$packageName:0",
+				isEnabled = isEnabled,
+				sortKey = getMaxSortKey() + 1,
+				addedIn = BuildConfig.VERSION_CODE,
+				lastUsedAt = 0,
+				isPinned = false,
+				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
+			)
+			upsert(entity)
+		}
+		return count
+	}
 
 	@Query("UPDATE sources SET pinned = :isPinned WHERE source = :source")
 	protected abstract suspend fun updateIsPinned(source: String, isPinned: Boolean): Int
@@ -115,6 +154,13 @@ abstract class MangaSourcesDao {
 
 	@Transaction
 	open suspend fun setEnabled(source: String, isEnabled: Boolean) {
+		if (source.startsWith("mihon:")) {
+			val parts = source.removePrefix("mihon:").split(':', limit = 2)
+			if (parts.isNotEmpty()) {
+				val pkg = parts[0]
+				setEnabledForPackage(pkg, isEnabled)
+			}
+		}
 		if (updateIsEnabled(source, isEnabled) == 0) {
 			val entity = MangaSourceEntity(
 				source = source,

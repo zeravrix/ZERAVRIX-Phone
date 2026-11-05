@@ -77,6 +77,17 @@ class MangaSourcesRepository @Inject constructor(
 	}
 
 	private suspend fun syncMihonSources(loaded: List<Extension.Loaded>) {
+		val existingEntities = dao.findAll()
+		val packagePreferences = HashMap<String, Pair<Boolean, Boolean>>()
+		for (entity in existingEntities) {
+			if (entity.source.startsWith("mihon:")) {
+				val pkg = entity.source.removePrefix("mihon:").substringBefore(':')
+				val current = packagePreferences[pkg]
+				val isEnabled = if (current != null) current.first && entity.isEnabled else entity.isEnabled
+				val isPinned = if (current != null) current.second || entity.isPinned else entity.isPinned
+				packagePreferences[pkg] = Pair(isEnabled, isPinned)
+			}
+		}
 		dao.deleteDummySources()
 		val descriptors = ArrayList<MihonMangaSource>()
 
@@ -98,21 +109,21 @@ class MangaSourcesRepository @Inject constructor(
 			}
 		}
 
-		val existingEntities = dao.findAll()
-		val existingKeys = existingEntities.mapTo(HashSet()) { it.source }
+		val existingKeys = dao.findAll().mapTo(HashSet()) { it.source }
 		var maxSortKey = dao.getMaxSortKey()
 
 		val toInsert = ArrayList<MangaSourceEntity>()
 		for (desc in descriptors) {
 			if (desc.name !in existingKeys) {
+				val pkgPref = packagePreferences[desc.packageName]
 				toInsert.add(
 					MangaSourceEntity(
 						source = desc.name,
-						isEnabled = true,
+						isEnabled = pkgPref?.first ?: true,
 						sortKey = ++maxSortKey,
 						addedIn = BuildConfig.VERSION_CODE,
 						lastUsedAt = 0,
-						isPinned = false,
+						isPinned = pkgPref?.second ?: false,
 						cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
 					)
 				)
@@ -163,6 +174,7 @@ class MangaSourcesRepository @Inject constructor(
 				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = it.name in pinnedKeys) }
 				list.addAll(enabled)
+				list.sortWith(compareBy<MangaSourceInfo> { !it.isPinned })
 				enabledSourcesCache.set(list.map { it.mangaSource })
 				list
 			}
@@ -281,6 +293,7 @@ class MangaSourcesRepository @Inject constructor(
 			val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = it.name in pinnedKeys) }
 			list.addAll(enabled)
+			list.sortWith(compareBy<MangaSourceInfo> { !it.isPinned })
 			enabledSourcesCache.set(list.map { it.mangaSource })
 			list
 		}

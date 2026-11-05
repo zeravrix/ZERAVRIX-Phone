@@ -64,10 +64,19 @@ class MangaListActivity :
 	override val appBar: AppBarLayout
 		get() = viewBinding.appbar
 
+	private var activeFilterOwner: FilterCoordinator.Owner? = null
+
 	override val filterCoordinator: FilterCoordinator
-		get() = checkNotNull(findFilterOwner()) {
-			"Cannot find FilterCoordinator.Owner fragment in ${supportFragmentManager.fragments}"
-		}.filterCoordinator
+		get() {
+			val owner = (activeFilterOwner as? Fragment)?.takeIf { it.isAdded } as? FilterCoordinator.Owner
+				?: findFilterOwner()?.takeIf { (it as? Fragment)?.isAdded != false }
+				?: supportFragmentManager.fragments.filterIsInstance<FilterCoordinator.Owner>().firstOrNull { (it as? Fragment)?.isAdded == true }
+				?: activeFilterOwner
+				?: findFilterOwner()
+			return checkNotNull(owner) {
+				"Cannot find FilterCoordinator.Owner fragment in ${supportFragmentManager.fragments}"
+			}.filterCoordinator
+		}
 
 	private lateinit var source: MangaSource
 
@@ -129,23 +138,34 @@ class MangaListActivity :
 		bundleOf(AppRouter.KEY_MANGA to ParcelableManga(manga)),
 	)
 
+	override fun onDestroy() {
+		activeFilterOwner = null
+		super.onDestroy()
+	}
+
 	fun hidePreview() = setSideFragment(FilterSheetFragment::class.java, null)
 
 	private fun initList(source: MangaSource, filter: MangaListFilter?, sortOrder: SortOrder?) {
 		val fm = supportFragmentManager
 		val existingFragment = fm.findFragmentById(R.id.container)
 		if (existingFragment is FilterCoordinator.Owner) {
+			activeFilterOwner = existingFragment
 			initFilter(existingFragment)
 		} else {
+			val fragment = if (source == LocalMangaSource) {
+				LocalListFragment()
+			} else {
+				RemoteListFragment.newInstance(source)
+			}
+			activeFilterOwner = fragment
 			fm.commit {
 				setReorderingAllowed(true)
-				val fragment = if (source == LocalMangaSource) {
-					LocalListFragment()
-				} else {
-					RemoteListFragment.newInstance(source)
-				}
 				replace(R.id.container, fragment)
-				runOnCommit { initFilter(fragment) }
+				runOnCommit {
+					if (isFinishing || isDestroyed) return@runOnCommit
+					activeFilterOwner = fragment
+					initFilter(fragment)
+				}
 				if (filter != null || sortOrder != null) {
 					runOnCommit(ApplyFilterRunnable(fragment, filter, sortOrder))
 				}
@@ -166,7 +186,7 @@ class MangaListActivity :
 				}
 			}
 		}
-		val filter = filterOwner.filterCoordinator
+		val filter = runCatching { filterOwner.filterCoordinator }.getOrNull() ?: return
 		val chipSort = viewBinding.buttonOrder
 		if (chipSort != null) {
 			val filterBadge = ViewBadge(chipSort, this)

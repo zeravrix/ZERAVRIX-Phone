@@ -282,10 +282,9 @@ class ExtensionsViewModel @Inject constructor(
                     .filter { it.packageName == pkgName }
                 if (enabled.isNotEmpty()) {
                     sourcesRepository.setIsPinned(enabled, pin)
-                } else {
-                    sourcesRepository.setExtensionPackagePinned(pkgName, pin)
                 }
             }
+            sourcesRepository.setExtensionPackagePinned(pkgName, pin)
         }
     }
 }

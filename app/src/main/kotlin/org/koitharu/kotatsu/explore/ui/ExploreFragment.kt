@@ -171,7 +171,7 @@ class ExploreFragment :
 		menu.findItem(R.id.action_pin).isVisible = selectedSources.all { !it.isPinned }
 		menu.findItem(R.id.action_unpin).isVisible = selectedSources.all { it.isPinned }
 		menu.findItem(R.id.action_disable)?.isVisible = !viewModel.isAllSourcesEnabled.value &&
-			selectedSources.all { it.mangaSource is MangaParserSource }
+			selectedSources.all { it.mangaSource is MangaParserSource || it.mangaSource is MihonMangaSource }
 		menu.findItem(R.id.action_delete)?.isVisible = selectedSources.all {
 			it.mangaSource is ExternalMangaSource || it.mangaSource is MihonMangaSource
 		}
