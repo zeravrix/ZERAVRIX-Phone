@@ -1,7 +1,7 @@
 ZERAVRIX is a free and open source manga reader for Android.
 
 
-**Main Features:**
+Main Features:
 
 
 - Online manga catalogs (with 1100+ manga sources)
