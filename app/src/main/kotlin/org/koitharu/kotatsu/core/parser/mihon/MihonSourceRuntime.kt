@@ -4,11 +4,13 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import eu.kanade.tachiyomi.source.Source
 import eu.kanade.tachiyomi.source.online.HttpSource
+import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Headers
 import okhttp3.Request
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.zeravrix.kotatsu.extension.ExtensionManager
 import org.zeravrix.kotatsu.extension.model.ContentWarning
+import org.zeravrix.kotatsu.extension.model.SourceNotInstalledException
 import org.zeravrix.kotatsu.extension.model.StubSource
 import org.zeravrix.kotatsu.extension.util.ExtensionLoader
 import java.io.File
@@ -80,6 +82,14 @@ data class LoadedMihonSource(
 
 object MihonSourceRuntime {
 
+    fun normalizeExtensionApiVersion(libVersion: Float, versionName: String?): Double? {
+        if (libVersion > 0f) {
+            val asDouble = libVersion.toString().toDoubleOrNull()
+            if (asDouble != null) return asDouble
+        }
+        return versionName?.substringBeforeLast('.')?.toDoubleOrNull()
+    }
+
     fun getLoaded(context: Context, descriptor: MihonMangaSource): LoadedMihonSource {
         val mgr = ExtensionManager.getInstance(context)
         val ext = mgr.getLoadedExtensions().find { it.pkgName == descriptor.packageName }
@@ -118,13 +128,21 @@ object MihonSourceRuntime {
 
     suspend fun getLoadedOrAwait(context: Context, descriptor: MihonMangaSource): LoadedMihonSource {
         val mgr = ExtensionManager.getInstance(context)
-        mgr.awaitInitialization()
+        withTimeoutOrNull(4000L) {
+            mgr.awaitInitialization()
+        }
         val loaded = getLoaded(context, descriptor)
         if (loaded.source !is StubSource) {
             return loaded
         }
-        mgr.loadExtensions()
-        return getLoaded(context, descriptor)
+        withTimeoutOrNull(4000L) {
+            mgr.loadExtensions()
+        }
+        val reloaded = getLoaded(context, descriptor)
+        if (reloaded.source is StubSource) {
+            throw SourceNotInstalledException(descriptor.sourceId, descriptor.sourceName)
+        }
+        return reloaded
     }
 
     private val iconCache = ConcurrentHashMap<String, Drawable>()

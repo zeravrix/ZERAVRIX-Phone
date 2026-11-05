@@ -6,8 +6,10 @@ import eu.kanade.tachiyomi.source.model.Page
 import eu.kanade.tachiyomi.source.model.SChapter
 import eu.kanade.tachiyomi.source.model.SManga
 import eu.kanade.tachiyomi.source.model.SMangaUpdate
+import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
@@ -30,13 +32,13 @@ class MihonMangaRepository(
     override val cacheEnabled: Boolean = true
 
     override val sortOrders = setOf(
-        SortOrder.POPULARITY,
         SortOrder.UPDATED,
+        SortOrder.POPULARITY,
         SortOrder.ALPHABETICAL,
         SortOrder.ALPHABETICAL_DESC,
     )
 
-    override var defaultSortOrder = SortOrder.POPULARITY
+    override var defaultSortOrder = SortOrder.UPDATED
 
     override val filterCapabilities = MangaListFilterCapabilities(
         isSearchSupported = true,
@@ -62,12 +64,22 @@ class MihonMangaRepository(
                 else -> (offset / pageSize) + 1
             }
             val query = filter?.query.orEmpty()
+            val effectiveOrder = order ?: defaultSortOrder
+            val isLatest = effectiveOrder == SortOrder.NEWEST || effectiveOrder == SortOrder.UPDATED ||
+                effectiveOrder == SortOrder.NEWEST_ASC || effectiveOrder == SortOrder.UPDATED_ASC
+            val supportsLatest = runCatching { loaded.source.supportsLatest }.getOrDefault(false)
+            val httpSource = loaded.source as? HttpSource
 
             val result = SourceGate.execute(effectiveSourceId) {
                 when {
                     query.isNotBlank() -> loaded.source.getSearchManga(page, query, FilterList())
-                    order == SortOrder.NEWEST || order == SortOrder.UPDATED || order == SortOrder.NEWEST_ASC || order == SortOrder.UPDATED_ASC ->
-                        loaded.source.getLatestUpdates(page)
+                    isLatest && supportsLatest -> {
+                        try {
+                            loaded.source.getLatestUpdates(page)
+                        } catch (_: UnsupportedOperationException) {
+                            loaded.source.getPopularManga(page)
+                        }
+                    }
                     else -> loaded.source.getPopularManga(page)
                 }
             }
@@ -82,21 +94,28 @@ class MihonMangaRepository(
             // Ensure first page loads enough items to fill modern vertical screens
             if (offset == 0 && allFetched.size in 1..15 && result.hasNextPage) {
                 runCatching {
-                    val page2 = SourceGate.execute(effectiveSourceId) {
-                        when {
-                            query.isNotBlank() -> loaded.source.getSearchManga(2, query, FilterList())
-                            order == SortOrder.NEWEST || order == SortOrder.UPDATED || order == SortOrder.NEWEST_ASC || order == SortOrder.UPDATED_ASC ->
-                                loaded.source.getLatestUpdates(2)
-                            else -> loaded.source.getPopularManga(2)
+                    withTimeoutOrNull(4000L) {
+                        val page2 = SourceGate.execute(effectiveSourceId) {
+                            when {
+                                query.isNotBlank() -> loaded.source.getSearchManga(2, query, FilterList())
+                                isLatest && supportsLatest -> {
+                                    try {
+                                        loaded.source.getLatestUpdates(2)
+                                    } catch (_: UnsupportedOperationException) {
+                                        loaded.source.getPopularManga(2)
+                                    }
+                                }
+                                else -> loaded.source.getPopularManga(2)
+                            }
                         }
+                        allFetched.addAll(page2.mangas)
+                        lastPage = 2
                     }
-                    allFetched.addAll(page2.mangas)
-                    lastPage = 2
                 }
             }
 
-            val mangas = allFetched.map { it.toKotatsuManga(emptyList()) }
-            when (order) {
+            val mangas = allFetched.map { it.toKotatsuManga(emptyList(), httpSource) }
+            when (effectiveOrder) {
                 SortOrder.ALPHABETICAL -> mangas.sortedBy { it.title.lowercase() }
                 SortOrder.ALPHABETICAL_DESC -> mangas.sortedByDescending { it.title.lowercase() }
                 else -> mangas
@@ -106,6 +125,7 @@ class MihonMangaRepository(
     override suspend fun getDetailsImpl(manga: Manga): Manga = withContext(Dispatchers.IO) {
         val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
+        val httpSource = loaded.source as? HttpSource
 
         val update = SourceGate.execute(effectiveSourceId) {
             loaded.source.getMangaUpdate(
@@ -118,7 +138,7 @@ class MihonMangaRepository(
 
         val chapters = update.chapters.orEmpty().map { it.toKotatsuChapter() }
 
-        update.manga.toKotatsuManga(chapters).copy(id = manga.id, source = loaded.descriptor)
+        update.manga.toKotatsuManga(chapters, httpSource).copy(id = manga.id, source = loaded.descriptor)
     }
 
     override suspend fun getPagesImpl(chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
@@ -147,7 +167,7 @@ class MihonMangaRepository(
 
         val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
-        val httpSource = loaded.source as? eu.kanade.tachiyomi.source.online.HttpSource
+        val httpSource = loaded.source as? HttpSource
             ?: return@withContext page.url
 
         val mihonPage = Page(
@@ -168,29 +188,41 @@ class MihonMangaRepository(
         runCatching { java.net.URI(baseUrl.trimEnd('/') + "/").resolve(value).toString() }
             .getOrDefault(value)
 
-    private fun SManga.toKotatsuManga(chapters: List<MangaChapter>): Manga = Manga(
-        id = stableId(source.name, if (url.isNotBlank()) url else "${title}_$thumbnail_url"),
-        title = title.ifBlank { "Untitled" },
-        altTitles = emptySet(),
-        url = url,
-        publicUrl = url,
-        rating = 0f,
-        contentRating = if (source.isNsfw) ContentRating.ADULT else ContentRating.SAFE,
-        coverUrl = thumbnail_url?.takeIf { it.isNotBlank() },
-        tags = genre?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.map {
-            org.koitharu.kotatsu.parsers.model.MangaTag(title = it, key = it.lowercase(), source = source)
-        }?.toSet().orEmpty(),
-        state = status.toMangaState(),
-        authors = listOfNotNull(author ?: artist).toSet(),
-        largeCoverUrl = thumbnail_url?.takeIf { it.isNotBlank() },
-        description = description,
-        chapters = chapters,
-        source = source,
-    )
+    private fun SManga.toKotatsuManga(chapters: List<MangaChapter>, httpSource: HttpSource? = null): Manga {
+        val resolvedCover = thumbnail_url?.takeIf { it.isNotBlank() }?.let { raw ->
+            if (raw.startsWith("http://") || raw.startsWith("https://")) raw
+            else if (httpSource != null) resolveUrl(httpSource.baseUrl, raw)
+            else raw
+        }
+        val resolvedUrl = url.let { raw ->
+            if (raw.startsWith("http://") || raw.startsWith("https://")) raw
+            else if (httpSource != null) resolveUrl(httpSource.baseUrl, raw)
+            else raw
+        }
+        return Manga(
+            id = stableId(source.name, if (url.isNotBlank()) url else "${title}_$thumbnail_url"),
+            title = title.ifBlank { "Untitled" },
+            altTitles = emptySet(),
+            url = url,
+            publicUrl = resolvedUrl,
+            rating = 0f,
+            contentRating = if (source.isNsfw) ContentRating.ADULT else ContentRating.SAFE,
+            coverUrl = resolvedCover,
+            tags = genre?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.map {
+                org.koitharu.kotatsu.parsers.model.MangaTag(title = it, key = it.lowercase(), source = source)
+            }?.toSet().orEmpty(),
+            state = status.toMangaState(),
+            authors = listOfNotNull(author ?: artist).toSet(),
+            largeCoverUrl = resolvedCover,
+            description = description,
+            chapters = chapters,
+            source = source,
+        )
+    }
 
-    private fun SMangaUpdate.toKotatsuManga(previous: Manga): Manga {
+    private fun SMangaUpdate.toKotatsuManga(previous: Manga, httpSource: HttpSource? = null): Manga {
         val updatedChapters = chapters.orEmpty().map { it.toKotatsuChapter() }
-        val updated = manga.toKotatsuManga(updatedChapters)
+        val updated = manga.toKotatsuManga(updatedChapters, httpSource)
         return updated.copy(
             id = previous.id,
             source = source,

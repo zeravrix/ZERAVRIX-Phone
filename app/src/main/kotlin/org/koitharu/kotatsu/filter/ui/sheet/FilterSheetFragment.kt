@@ -159,9 +159,27 @@ class FilterSheetFragment : BaseAdaptiveSheet<SheetFilterBinding>(),
     override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
         val filter = FilterCoordinator.require(this)
         when (parent.id) {
-            R.id.spinner_order -> filter.setSortOrder(filter.sortOrder.value.availableItems[position])
-            R.id.spinner_locale -> filter.setLocale(filter.locale.value.availableItems[position])
-            R.id.spinner_original_locale -> filter.setOriginalLocale(filter.originalLocale.value.availableItems[position])
+            R.id.spinner_order -> {
+                val available = filter.sortOrder.value.availableItems
+                if (position in available.indices) {
+                    val newOrder = available[position]
+                    if (newOrder != filter.sortOrder.value.selectedItems.firstOrNull()) {
+                        filter.setSortOrder(newOrder)
+                    }
+                }
+            }
+            R.id.spinner_locale -> {
+                val available = filter.locale.value.availableItems
+                if (position in available.indices) {
+                    filter.setLocale(available[position])
+                }
+            }
+            R.id.spinner_original_locale -> {
+                val available = filter.originalLocale.value.availableItems
+                if (position in available.indices) {
+                    filter.setOriginalLocale(available[position])
+                }
+            }
         }
     }
 
@@ -249,15 +267,19 @@ class FilterSheetFragment : BaseAdaptiveSheet<SheetFilterBinding>(),
         if (value.isEmpty()) {
             return
         }
-        val selected = value.selectedItems.single()
-        b.spinnerOrder.adapter = ArrayAdapter(
-            b.spinnerOrder.context,
-            android.R.layout.simple_spinner_dropdown_item,
-            android.R.id.text1,
-            value.availableItems.map { b.spinnerOrder.context.getString(it.titleRes) },
-        )
+        val selected = value.selectedItems.firstOrNull() ?: value.availableItems.firstOrNull() ?: return
+        val titles = value.availableItems.map { b.spinnerOrder.context.getString(it.titleRes) }
+        val currentAdapter = b.spinnerOrder.adapter as? ArrayAdapter<String>
+        if (currentAdapter == null || currentAdapter.count != titles.size) {
+            b.spinnerOrder.adapter = ArrayAdapter(
+                b.spinnerOrder.context,
+                android.R.layout.simple_spinner_dropdown_item,
+                android.R.id.text1,
+                titles,
+            )
+        }
         val selectedIndex = value.availableItems.indexOf(selected)
-        if (selectedIndex >= 0) {
+        if (selectedIndex >= 0 && b.spinnerOrder.selectedItemPosition != selectedIndex) {
             b.spinnerOrder.setSelection(selectedIndex, false)
         }
     }

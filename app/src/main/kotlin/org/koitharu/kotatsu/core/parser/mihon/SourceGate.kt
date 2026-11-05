@@ -4,12 +4,13 @@ import android.util.Log
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import java.io.IOException
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Gatekeeper that limits concurrency per source (max 2 requests in flight)
  * and applies exponential backoff on HTTP 429 (Too Many Requests), honoring Retry-After.
+ * Enforces a strict 25-second execution timeout to prevent infinite UI loading loops.
  */
 object SourceGate {
 
@@ -17,12 +18,14 @@ object SourceGate {
     private const val MAX_CONCURRENT_REQUESTS = 2
     private const val MIN_GAP_MS = 150L
     private const val MAX_RETRIES = 3
+    private const val TIMEOUT_MS = 25_000L
 
+    private val fallbackSemaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
     private val semaphores = ConcurrentHashMap<Long, Semaphore>()
     private val lastRequestTimes = ConcurrentHashMap<Long, Long>()
 
     private fun getSemaphore(sourceId: Long): Semaphore =
-        if (sourceId <= 0L) Semaphore(MAX_CONCURRENT_REQUESTS)
+        if (sourceId <= 0L) fallbackSemaphore
         else semaphores.getOrPut(sourceId) { Semaphore(MAX_CONCURRENT_REQUESTS) }
 
     suspend fun <T> execute(sourceId: Long, initialDelayMs: Long = 1000L, block: suspend () -> T): T {
@@ -43,7 +46,9 @@ object SourceGate {
 
             while (true) {
                 try {
-                    return@withPermit block()
+                    return@withPermit withTimeout(TIMEOUT_MS) {
+                        block()
+                    }
                 } catch (e: Throwable) {
                     val is429 = isHttp429(e)
                     if (is429 && attempt < MAX_RETRIES) {

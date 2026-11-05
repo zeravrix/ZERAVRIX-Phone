@@ -55,6 +55,9 @@
 -keep interface okhttp3.zstd.** { *; }
 -keep class com.github.luben.zstd.** { *; }
 -keep class io.github.airgapit.zstd.** { *; }
+-keep class com.squareup.zstd.** { *; }
+-keep interface com.squareup.zstd.** { *; }
+-dontwarn com.squareup.zstd.**
 -dontwarn okhttp3.zstd.**
 -dontwarn com.github.luben.zstd.**
 -dontwarn io.github.airgapit.zstd.**

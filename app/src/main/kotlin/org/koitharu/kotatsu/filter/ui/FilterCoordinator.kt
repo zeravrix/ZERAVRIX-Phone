@@ -81,7 +81,7 @@ class FilterCoordinator @Inject constructor(
 
     val sortOrder: StateFlow<FilterProperty<SortOrder>> = currentSortOrder.map { selected ->
         FilterProperty(
-            availableItems = availableSortOrders.sortedByOrdinal(),
+            availableItems = availableSortOrders.toList(),
             selectedItem = selected,
         )
     }.stateIn(coroutineScope, SharingStarted.Lazily, FilterProperty.LOADING)
