@@ -10,13 +10,13 @@
 [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B-3DDC84.svg?style=flat&logo=android)](https://github.com/zeravrix/ZERAVRIX-Phone)
 [![Engine](https://img.shields.io/badge/Engine-Native%20%2B%20Universal%20Extensions-blue.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone)
 [![License](https://img.shields.io/badge/License-GPLv3-green.svg?style=flat)](LICENSE)
-[![Latest Release](https://img.shields.io/badge/Release-v2.0.0-purple.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone/releases)
+[![Latest Release](https://img.shields.io/badge/Release-v2.0.1-purple.svg?style=flat)](https://github.com/zeravrix/ZERAVRIX-Phone/releases)
 
 <br/>
 
 ZERAVRIX Phone 2.0 combines the speed and battery efficiency of native source parsers with the boundless ecosystem of universal manhwa, manga, manhua, and comics source extensions, wrapped in a Material Design 3 interface.
 
-[Official Website](https://zeravrix.pages.dev/) • [Download Latest APK](https://github.com/zeravrix/ZERAVRIX-Phone/releases) • [Specifications](#specifications) • [Architecture](#architecture) • [Building](#building-from-source)
+[Official Website](https://zeravrix.pages.dev/) &bull; [Download Latest APK](https://github.com/zeravrix/ZERAVRIX-Phone/releases) &bull; [Specifications](#specifications) &bull; [Architecture](#architecture) &bull; [Building](#building-from-source)
 
 </div>
 
