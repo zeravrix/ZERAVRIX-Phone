@@ -24,6 +24,7 @@ import org.zeravrix.kotatsu.R
 import org.zeravrix.kotatsu.core.model.isLocal
 import org.zeravrix.kotatsu.core.nav.AppRouter
 import org.zeravrix.kotatsu.core.nav.ReaderIntent
+import org.zeravrix.kotatsu.reader.ui.ReaderState
 import org.zeravrix.kotatsu.core.util.ext.getThemeColor
 import org.zeravrix.kotatsu.core.util.ext.observe
 import org.zeravrix.kotatsu.details.ui.model.HistoryInfo
@@ -107,13 +108,17 @@ class ReadButtonDelegate(
 
 	private fun openReader(isIncognitoMode: Boolean) {
 		val manga = viewModel.getMangaOrNull() ?: return
-		if (viewModel.historyInfo.value.isChapterMissing) {
+		val historyInfo = viewModel.historyInfo.value
+		if (historyInfo.isChapterMissing) {
 			Snackbar.make(buttonRead, R.string.chapter_is_missing, Snackbar.LENGTH_SHORT)
 				.show() // TODO
 		} else {
 			val intentBuilder = ReaderIntent.Builder(context)
 				.manga(manga)
 				.branch(viewModel.selectedBranchValue)
+			if (historyInfo.canContinue && historyInfo.history != null) {
+				intentBuilder.state(ReaderState(historyInfo.history))
+			}
 			if (isIncognitoMode) {
 				intentBuilder.incognito()
 			}

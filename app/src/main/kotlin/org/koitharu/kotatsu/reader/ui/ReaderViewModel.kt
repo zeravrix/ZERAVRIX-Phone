@@ -244,18 +244,18 @@ class ReaderViewModel @Inject constructor(
     }
 
     fun saveCurrentState(state: ReaderState? = null) {
-        if (state != null) {
-            readingState.value = state
-            savedStateHandle[ReaderIntent.EXTRA_STATE] = state
-        }
+        val effectiveState = state ?: readingState.value ?: return
+        readingState.value = effectiveState
+        savedStateHandle[ReaderIntent.EXTRA_STATE] = effectiveState
         if (isIncognitoMode.value != false) {
             return
         }
-        val readerState = state ?: readingState.value ?: return
+        val manga = getMangaOrNull() ?: return
+        val percent = computePercent(effectiveState.chapterId, effectiveState.page)
         historyUpdateUseCase.invokeAsync(
-            manga = getMangaOrNull() ?: return,
-            readerState = readerState,
-            percent = computePercent(readerState.chapterId, readerState.page),
+            manga = manga,
+            readerState = effectiveState,
+            percent = percent,
         )
     }
 
@@ -343,9 +343,21 @@ class ReaderViewModel @Inject constructor(
                 return@launchJob // TODO
             }
             val centerPos = (lowerPos + upperPos) / 2
-            pages.getOrNull(centerPos)?.let { page ->
+            val page = pages.getOrNull(centerPos)
+            if (page != null) {
                 readingState.update { cs ->
                     cs?.copy(chapterId = page.chapterId, page = page.index)
+                }
+                val updated = readingState.value
+                if (updated != null) {
+                    savedStateHandle[ReaderIntent.EXTRA_STATE] = updated
+                    if (isIncognitoMode.value != true) {
+                        val currentManga = getMangaOrNull()
+                        if (currentManga != null) {
+                            val percent = computePercent(updated.chapterId, updated.page)
+                            historyUpdateUseCase.invokeAsync(currentManga, updated, percent)
+                        }
+                    }
                 }
             }
             notifyStateChanged()

@@ -10,6 +10,7 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -93,7 +94,8 @@ class ExtensionInstaller(
         runCatching { ExtensionInstallService.start(context) }
 
         val job = scope.launch {
-            val tmpFile = File(context.cacheDir, "ext_${pkgName}.apk")
+            val installerDir = File(context.cacheDir, "installer").apply { mkdirs() }
+            val tmpFile = File(installerDir, "ext_${pkgName}.apk")
             try {
                 stepFlow.value = InstallStep.Downloading
                 val request = Request.Builder()
@@ -124,17 +126,14 @@ class ExtensionInstaller(
                 val storeKey = extension.store.signingKey
                 val hasStoreKey = storeKey.isNotBlank() && storeKey != "NO_SIGNING_KEY"
                 if (hasStoreKey && signatures.none { it.equals(storeKey, ignoreCase = true) }) {
-                    // Store publishes a key and the APK does not match it: refuse.
                     tmpFile.delete()
                     throw SecurityException("APK signature does not match the key published by ${extension.store.name}")
                 }
-                // Stores without a key (or unknown keys) install fine: the extension is then
-                // listed as "Untrusted" and the user decides in the trust dialog, like Mihon.
 
                 stepFlow.value = InstallStep.Installing
 
-                // Install through PackageInstaller session
-                installViaPackageInstaller(context, tmpFile, packageInfo.packageName)
+                // Launch genuine Android system package installer interface
+                installViaSystemInstaller(context, tmpFile)
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     stepFlow.value = InstallStep.Idle
@@ -144,9 +143,6 @@ class ExtensionInstaller(
                 showError(e.message ?: e.javaClass.simpleName)
                 stepFlow.value = InstallStep.Error
             } finally {
-                if (tmpFile.exists()) {
-                    tmpFile.delete()
-                }
                 if (activeJobs.size <= 1) {
                     runCatching { ExtensionInstallService.stop(context) }
                 }
@@ -169,7 +165,7 @@ class ExtensionInstaller(
         return try {
             val packageInfo = ExtensionLoader.getArchivePackageInfo(context, file)
                 ?: return false
-            installViaPackageInstaller(context, file, packageInfo.packageName)
+            installViaSystemInstaller(context, file)
             true
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install from file ${file.name}", e)
@@ -183,7 +179,8 @@ class ExtensionInstaller(
             return false
         }
 
-        val tmpFile = File(context.cacheDir, "ext_import_${System.currentTimeMillis()}.apk")
+        val installerDir = File(context.cacheDir, "installer").apply { mkdirs() }
+        val tmpFile = File(installerDir, "ext_import_${System.currentTimeMillis()}.apk")
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(tmpFile).use { output ->
@@ -195,11 +192,20 @@ class ExtensionInstaller(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to install from URI $uri", e)
             false
-        } finally {
-            if (tmpFile.exists()) {
-                tmpFile.delete()
-            }
         }
+    }
+
+    fun installViaSystemInstaller(context: Context, apkFile: File) {
+        val contentUri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.files",
+            apkFile,
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(contentUri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 
     fun installViaPackageInstaller(context: Context, apkFile: File, packageName: String): Int {

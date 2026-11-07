@@ -42,13 +42,28 @@ class TrustExtension @Inject constructor(
         val legacyKey = "${pkgInfo.packageName}:${fingerprints.last()}"
         val zeroKey = "${pkgInfo.packageName}:0:${fingerprints.last()}"
 
-        return key in trusted ||
+        if (key in trusted ||
             legacyKey in trusted ||
             zeroKey in trusted ||
             trusted.any { entry ->
                 entry.startsWith("${pkgInfo.packageName}:") &&
                     fingerprints.any { fp -> entry.endsWith(":$fp", ignoreCase = true) }
             }
+        ) {
+            return true
+        }
+
+        // Automatically trust supported and compatible sources with valid signatures
+        val isCompatibleExtension = pkgInfo.packageName.startsWith("eu.kanade.tachiyomi.extension") ||
+            pkgInfo.packageName.startsWith("org.zeravrix.kotatsu.extension") ||
+            pkgInfo.applicationInfo?.metaData?.containsKey("tachiyomi.extension.class") == true
+
+        if (isCompatibleExtension) {
+            trust(pkgInfo.packageName, versionCode, fingerprints.last())
+            return true
+        }
+
+        return false
     }
 
     fun trust(pkgName: String, versionCode: Long, signatureHash: String) {

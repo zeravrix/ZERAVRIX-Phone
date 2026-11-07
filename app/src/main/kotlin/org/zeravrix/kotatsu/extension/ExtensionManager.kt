@@ -21,6 +21,7 @@ import kotlinx.coroutines.sync.withLock
 import org.zeravrix.kotatsu.extension.installer.ExtensionInstaller
 import org.zeravrix.kotatsu.extension.model.Extension
 import org.zeravrix.kotatsu.extension.model.ExtensionStore
+import org.zeravrix.kotatsu.extension.model.InstallStep
 import org.zeravrix.kotatsu.extension.store.ExtensionStoreService
 import org.zeravrix.kotatsu.extension.trust.TrustExtension
 import org.zeravrix.kotatsu.extension.util.ExtensionInstallReceiver
@@ -182,6 +183,7 @@ class ExtensionManager @Inject constructor(
 
             _loadedMap.value = _loadedMap.value + (extension.pkgName to updated)
             _notLoadedMap.value = _notLoadedMap.value - extension.pkgName
+            ExtensionInstaller.updateInstallStep(extension.pkgName, InstallStep.Installed)
         }
 
         override suspend fun onExtensionNotLoaded(extension: Extension.NotLoaded) {
@@ -192,11 +194,13 @@ class ExtensionManager @Inject constructor(
 
             _loadedMap.value = _loadedMap.value - extension.pkgName
             _notLoadedMap.value = _notLoadedMap.value + (extension.pkgName to updated)
+            ExtensionInstaller.updateInstallStep(extension.pkgName, InstallStep.Idle)
         }
 
         override suspend fun onPackageUninstalled(pkgName: String) {
             _loadedMap.value = _loadedMap.value - pkgName
             _notLoadedMap.value = _notLoadedMap.value - pkgName
+            ExtensionInstaller.updateInstallStep(pkgName, InstallStep.Idle)
         }
     }
 

@@ -203,11 +203,13 @@ class ReaderActivity :
 	}
 
 	override fun onPause() {
+		viewModel.saveCurrentState(readerManager.currentReader?.getCurrentState())
 		super.onPause()
 		viewModel.onPause()
 	}
 
 	override fun onStop() {
+		viewModel.saveCurrentState(readerManager.currentReader?.getCurrentState())
 		super.onStop()
 		viewModel.onStop()
 	}

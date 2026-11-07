@@ -115,6 +115,7 @@ interface AppModule {
 				val rootDir = context.externalCacheDir ?: context.cacheDir
 				DiskCache.Builder()
 					.directory(rootDir.resolve(CacheDir.THUMBS.dir))
+					.maxSizeBytes(250L * 1024 * 1024)
 					.build()
 			}
 			val memoryCacheFactory = {
@@ -211,8 +212,8 @@ interface AppModule {
 		) = LocalStorageCache(
 			context = context,
 			dir = CacheDir.PAGES,
-			defaultSize = FileSize.MEGABYTES.convert(200, FileSize.BYTES),
-			minSize = FileSize.MEGABYTES.convert(20, FileSize.BYTES),
+			defaultSize = FileSize.MEGABYTES.convert(500, FileSize.BYTES),
+			minSize = FileSize.MEGABYTES.convert(30, FileSize.BYTES),
 		)
 
 		@Provides

@@ -21,8 +21,8 @@ android {
 		applicationId 'org.zeravrix.android'
 		minSdk = 26
 		targetSdk = 34
-		versionCode = 2002
-		versionName = '2.0.2'
+		versionCode = 2003
+		versionName = '2.0.3'
 		generatedDensities = []
 		testInstrumentationRunner 'org.zeravrix.kotatsu.HiltTestRunner'
 		ksp {

@@ -10,6 +10,10 @@ import eu.kanade.tachiyomi.source.online.HttpSource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import java.util.concurrent.ConcurrentHashMap
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaChapter
@@ -114,7 +118,8 @@ class MihonMangaRepository(
             )
         } }
 
-        val chapters = update.chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val rawChapters = update.chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val chapters = normalizeChapterOrder(rawChapters)
 
         update.manga.toKotatsuManga(
             chapters = chapters,
@@ -129,9 +134,38 @@ class MihonMangaRepository(
         val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
 
-        val mihonPages = guarded("pages") { SourceGate.execute(effectiveSourceId) {
-            loaded.source.getPageList(chapter.toSChapter())
-        } }
+        val sChapter = chapter.toSChapter()
+        val mihonPages = try {
+            guarded("pages") { SourceGate.execute(effectiveSourceId) {
+                loaded.source.getPageList(sChapter)
+            } }
+        } catch (e: Exception) {
+            if (e.message?.contains("Refresh Chapter List", ignoreCase = true) == true) {
+                runCatching {
+                    val update = SourceGate.execute(effectiveSourceId) {
+                        loaded.source.getMangaUpdate(
+                            SManga.create().apply {
+                                url = chapter.url.substringBeforeLast("/").ifBlank { chapter.url }
+                            },
+                            listOf(sChapter),
+                            fetchDetails = false,
+                            fetchChapters = true,
+                        )
+                    }
+                    update.chapters?.forEach { ch ->
+                        runCatching { ch.memo }.getOrNull()?.let { m ->
+                            MihonMemoStore.putChapterMemo(source.name, ch.url, m)
+                        }
+                    }
+                }
+                val refreshedChapter = chapter.toSChapter()
+                guarded("pages") { SourceGate.execute(effectiveSourceId) {
+                    loaded.source.getPageList(refreshedChapter)
+                } }
+            } else {
+                throw e
+            }
+        }
 
         mihonPages.mapIndexed { i, page ->
             val pageUrl = page.url
@@ -210,6 +244,9 @@ class MihonMangaRepository(
             else if (httpSource != null) resolveUrl(httpSource.baseUrl, raw)
             else raw
         }
+        runCatching { this.memo }.getOrNull()?.let { m ->
+            MihonMemoStore.putMangaMemo(source.name, url, m)
+        }
         return Manga(
             id = stableId(source.name, if (url.isNotBlank()) url else "${title}_$thumbnail_url"),
             title = title.ifBlank { "Untitled" },
@@ -231,8 +268,35 @@ class MihonMangaRepository(
         )
     }
 
+    private fun normalizeChapterOrder(chapters: List<MangaChapter>): List<MangaChapter> {
+        if (chapters.size <= 1) return chapters
+        val numbered = chapters.filter { it.number > 0f }
+        if (numbered.size >= 2) {
+            val firstNum = numbered.first().number
+            val lastNum = numbered.last().number
+            if (firstNum > lastNum) {
+                // Descending (newest first, standard extension contract) -> reverse to ascending (first to latest)
+                return chapters.reversed()
+            } else if (firstNum < lastNum) {
+                // Already in ascending order
+                return chapters
+            }
+        }
+        val withDates = chapters.filter { it.uploadDate > 0L }
+        if (withDates.size >= 2) {
+            if (withDates.first().uploadDate > withDates.last().uploadDate) {
+                return chapters.reversed()
+            } else if (withDates.first().uploadDate < withDates.last().uploadDate) {
+                return chapters
+            }
+        }
+        // Standard extension specification: chapters are ordered newest first by default
+        return chapters.reversed()
+    }
+
     private fun SMangaUpdate.toKotatsuManga(previous: Manga, httpSource: HttpSource? = null): Manga {
-        val updatedChapters = chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val rawChapters = chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val updatedChapters = normalizeChapterOrder(rawChapters)
         val updated = manga.toKotatsuManga(updatedChapters, httpSource, previous.url, previous.title, previous.coverUrl)
         return updated.copy(
             id = previous.id,
@@ -242,17 +306,22 @@ class MihonMangaRepository(
         )
     }
 
-    private fun SChapter.toKotatsuChapter(): MangaChapter = MangaChapter(
-        id = stableId(source.name, "chapter:$url"),
-        title = runCatching { name }.getOrDefault("").trim().removePrefix("#").trim().ifBlank { "Chapter ${chapter_number.takeIf { it > 0 } ?: ""}" }.trim(),
-        number = chapter_number,
-        volume = 0,
-        url = url,
-        scanlator = scanlator,
-        uploadDate = date_upload,
-        branch = "",
-        source = source,
-    )
+    private fun SChapter.toKotatsuChapter(): MangaChapter {
+        runCatching { memo }.getOrNull()?.let { m ->
+            MihonMemoStore.putChapterMemo(source.name, url, m)
+        }
+        return MangaChapter(
+            id = stableId(source.name, "chapter:$url"),
+            title = runCatching { name }.getOrDefault("").trim().removePrefix("#").trim().ifBlank { "Chapter ${chapter_number.takeIf { it > 0 } ?: ""}" }.trim(),
+            number = chapter_number,
+            volume = 0,
+            url = url,
+            scanlator = scanlator,
+            uploadDate = date_upload,
+            branch = "",
+            source = source,
+        )
+    }
 
     private fun Manga.toSManga(): SManga = SManga.create().also {
         it.url = url
@@ -264,6 +333,22 @@ class MihonMangaRepository(
         it.genre = tags.joinToString { tag -> tag.title }.takeIf { s -> s.isNotBlank() }
         it.status = SManga.ONGOING
         it.initialized = chapters.orEmpty().isNotEmpty()
+
+        var memoObj = MihonMemoStore.getMangaMemo(source.name, url)
+        if (memoObj == null || !memoObj.containsKey("id")) {
+            val hashId = url.substringAfterLast("#", "").toIntOrNull()
+            if (hashId != null) {
+                val slug = url.substringBefore("#").trim('/').substringAfterLast('/')
+                memoObj = buildJsonObject {
+                    put("id", hashId)
+                    if (slug.isNotEmpty()) put("slug", slug)
+                }
+                MihonMemoStore.putMangaMemo(source.name, url, memoObj)
+            }
+        }
+        if (memoObj != null) {
+            it.memo = memoObj
+        }
     }
 
     private fun MangaChapter.toSChapter(): SChapter = SChapter.create().also {
@@ -272,6 +357,25 @@ class MihonMangaRepository(
         it.chapter_number = number
         it.scanlator = scanlator.orEmpty()
         it.date_upload = uploadDate
+
+        var memoObj = MihonMemoStore.getChapterMemo(source.name, url)
+        if (memoObj == null || !memoObj.containsKey("id")) {
+            val hashId = url.substringAfterLast("#", "").toIntOrNull()
+            if (hashId != null) {
+                val segments = url.substringBefore("#").trim('/').split('/')
+                val seriesSlug = if (segments.size >= 2) segments[segments.size - 2] else ""
+                val slug = if (segments.isNotEmpty()) segments.last() else ""
+                memoObj = buildJsonObject {
+                    put("id", hashId)
+                    if (seriesSlug.isNotEmpty()) put("seriesSlug", seriesSlug)
+                    if (slug.isNotEmpty()) put("slug", slug)
+                }
+                MihonMemoStore.putChapterMemo(source.name, url, memoObj)
+            }
+        }
+        if (memoObj != null) {
+            it.memo = memoObj
+        }
     }
 
     private fun Int.toMangaState(): MangaState = when (this) {
@@ -287,5 +391,30 @@ class MihonMangaRepository(
 
         fun stableId(namespace: String, value: String): Long =
             ("$namespace|$value").hashCode().toLong() and Long.MAX_VALUE
+    }
+}
+
+internal object MihonMemoStore {
+    private val mangaMemoCache = ConcurrentHashMap<String, JsonObject>()
+    private val chapterMemoCache = ConcurrentHashMap<String, JsonObject>()
+
+    fun putMangaMemo(source: String, url: String, memo: JsonObject?) {
+        if (memo != null && memo.isNotEmpty()) {
+            mangaMemoCache["$source:$url"] = memo
+        }
+    }
+
+    fun getMangaMemo(source: String, url: String): JsonObject? {
+        return mangaMemoCache["$source:$url"]
+    }
+
+    fun putChapterMemo(source: String, url: String, memo: JsonObject?) {
+        if (memo != null && memo.isNotEmpty()) {
+            chapterMemoCache["$source:$url"] = memo
+        }
+    }
+
+    fun getChapterMemo(source: String, url: String): JsonObject? {
+        return chapterMemoCache["$source:$url"]
     }
 }
