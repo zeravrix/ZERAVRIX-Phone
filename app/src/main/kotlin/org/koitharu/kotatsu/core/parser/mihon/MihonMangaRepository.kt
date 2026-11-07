@@ -36,13 +36,13 @@ class MihonMangaRepository(
     override val cacheEnabled: Boolean = true
 
     override val sortOrders = setOf(
-        SortOrder.UPDATED,
+        SortOrder.NEWEST,
         SortOrder.POPULARITY,
         SortOrder.ALPHABETICAL,
         SortOrder.ALPHABETICAL_DESC,
     )
 
-    override var defaultSortOrder = SortOrder.UPDATED
+    override var defaultSortOrder = SortOrder.NEWEST
 
     override val filterCapabilities = MangaListFilterCapabilities(
         isSearchSupported = true,
@@ -80,11 +80,29 @@ class MihonMangaRepository(
                     isLatest && supportsLatest -> {
                         try {
                             loaded.source.getLatestUpdates(page)
-                        } catch (_: UnsupportedOperationException) {
-                            loaded.source.getPopularManga(page)
+                        } catch (_: Throwable) {
+                            try {
+                                loaded.source.getPopularManga(page)
+                            } catch (_: Throwable) {
+                                loaded.source.getSearchManga(page, "", FilterList())
+                            }
                         }
                     }
-                    else -> loaded.source.getPopularManga(page)
+                    else -> {
+                        try {
+                            loaded.source.getPopularManga(page)
+                        } catch (_: Throwable) {
+                            if (supportsLatest) {
+                                try {
+                                    loaded.source.getLatestUpdates(page)
+                                } catch (_: Throwable) {
+                                    loaded.source.getSearchManga(page, "", FilterList())
+                                }
+                            } else {
+                                loaded.source.getSearchManga(page, "", FilterList())
+                            }
+                        }
+                    }
                 }
             }
 
@@ -96,7 +114,9 @@ class MihonMangaRepository(
 
             val allFetched = ArrayList(result.mangas)
 
-            val mangas = allFetched.map { it.toKotatsuManga(emptyList(), httpSource) }
+            val mangas = allFetched.mapNotNull { manga ->
+                runCatching { manga.toKotatsuManga(emptyList(), httpSource) }.getOrNull()
+            }
             when (effectiveOrder) {
                 SortOrder.ALPHABETICAL -> mangas.sortedBy { it.title.lowercase() }
                 SortOrder.ALPHABETICAL_DESC -> mangas.sortedByDescending { it.title.lowercase() }
@@ -118,7 +138,7 @@ class MihonMangaRepository(
             )
         } }
 
-        val rawChapters = update.chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val rawChapters = update.chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter(manga.url) }.getOrNull() }
         val chapters = normalizeChapterOrder(rawChapters)
 
         update.manga.toKotatsuManga(
@@ -140,27 +160,41 @@ class MihonMangaRepository(
                 loaded.source.getPageList(sChapter)
             } }
         } catch (e: Exception) {
-            if (e.message?.contains("Refresh Chapter List", ignoreCase = true) == true) {
+            val isRefreshNeeded = e.message?.contains("Refresh", ignoreCase = true) == true ||
+                e.message?.contains("Chapter List", ignoreCase = true) == true
+            if (isRefreshNeeded) {
+                val parentMangaUrl = MihonMemoStore.getChapterMangaUrl(source.name, chapter.url)
+                    ?: run {
+                        val cleanUrl = chapter.url.substringBefore('#').trimEnd('/')
+                        cleanUrl.substringBeforeLast('/').ifBlank { chapter.url }
+                    }
+                var freshChapter: SChapter? = null
                 runCatching {
                     val update = SourceGate.execute(effectiveSourceId) {
                         loaded.source.getMangaUpdate(
                             SManga.create().apply {
-                                url = chapter.url.substringBeforeLast("/").ifBlank { chapter.url }
+                                url = parentMangaUrl
+                                title = ""
                             },
-                            listOf(sChapter),
+                            emptyList(),
                             fetchDetails = false,
                             fetchChapters = true,
                         )
                     }
+                    val found = update.chapters?.find { it.url == chapter.url || it.url == sChapter.url }
+                    if (found != null) {
+                        freshChapter = found
+                    }
                     update.chapters?.forEach { ch ->
                         runCatching { ch.memo }.getOrNull()?.let { m ->
                             MihonMemoStore.putChapterMemo(source.name, ch.url, m)
+                            MihonMemoStore.putChapterMangaUrl(source.name, ch.url, parentMangaUrl)
                         }
                     }
                 }
-                val refreshedChapter = chapter.toSChapter()
+                val chapterToLoad = freshChapter ?: chapter.toSChapter()
                 guarded("pages") { SourceGate.execute(effectiveSourceId) {
-                    loaded.source.getPageList(refreshedChapter)
+                    loaded.source.getPageList(chapterToLoad)
                 } }
             } else {
                 throw e
@@ -223,6 +257,7 @@ class MihonMangaRepository(
             .getOrDefault(value)
 
     // Mihon extensions are allowed to leave SManga.url / SManga.title unset in detail responses
+    // Mihon extensions are allowed to leave SManga.url / SManga.title unset in detail responses
     // (they are lateinit). Mihon itself guards against UninitializedPropertyAccessException.
     private fun SManga.toKotatsuManga(
         chapters: List<MangaChapter>,
@@ -233,7 +268,13 @@ class MihonMangaRepository(
     ): Manga {
         val url = runCatching { this.url }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallbackUrl
         val title = runCatching { this.title }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallbackTitle
-        val thumbnail_url = this.thumbnail_url?.takeIf { it.isNotBlank() } ?: fallbackCover
+        val thumbnail_url = runCatching { this.thumbnail_url }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallbackCover
+        val author = runCatching { this.author }.getOrNull()
+        val artist = runCatching { this.artist }.getOrNull()
+        val description = runCatching { this.description }.getOrNull()
+        val genre = runCatching { this.genre }.getOrNull()
+        val status = runCatching { this.status }.getOrDefault(SManga.ONGOING)
+
         val resolvedCover = thumbnail_url?.takeIf { it.isNotBlank() }?.let { raw ->
             if (raw.startsWith("http://") || raw.startsWith("https://")) raw
             else if (httpSource != null) resolveUrl(httpSource.baseUrl, raw)
@@ -295,7 +336,7 @@ class MihonMangaRepository(
     }
 
     private fun SMangaUpdate.toKotatsuManga(previous: Manga, httpSource: HttpSource? = null): Manga {
-        val rawChapters = chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val rawChapters = chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter(previous.url) }.getOrNull() }
         val updatedChapters = normalizeChapterOrder(rawChapters)
         val updated = manga.toKotatsuManga(updatedChapters, httpSource, previous.url, previous.title, previous.coverUrl)
         return updated.copy(
@@ -306,9 +347,12 @@ class MihonMangaRepository(
         )
     }
 
-    private fun SChapter.toKotatsuChapter(): MangaChapter {
+    private fun SChapter.toKotatsuChapter(mangaUrl: String? = null): MangaChapter {
         runCatching { memo }.getOrNull()?.let { m ->
             MihonMemoStore.putChapterMemo(source.name, url, m)
+        }
+        if (!mangaUrl.isNullOrBlank()) {
+            MihonMemoStore.putChapterMangaUrl(source.name, url, mangaUrl)
         }
         return MangaChapter(
             id = stableId(source.name, "chapter:$url"),
@@ -397,24 +441,61 @@ class MihonMangaRepository(
 internal object MihonMemoStore {
     private val mangaMemoCache = ConcurrentHashMap<String, JsonObject>()
     private val chapterMemoCache = ConcurrentHashMap<String, JsonObject>()
+    private val chapterToMangaUrl = ConcurrentHashMap<String, String>()
+
+    private val prefs by lazy {
+        okhttp3.internal.platform.PlatformRegistry.applicationContext?.getSharedPreferences("zeravrix_mihon_memos", Context.MODE_PRIVATE)
+    }
+
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 
     fun putMangaMemo(source: String, url: String, memo: JsonObject?) {
         if (memo != null && memo.isNotEmpty()) {
             mangaMemoCache["$source:$url"] = memo
+            runCatching {
+                prefs?.edit()?.putString("mm:$source:$url", memo.toString())?.apply()
+            }
         }
     }
 
     fun getMangaMemo(source: String, url: String): JsonObject? {
-        return mangaMemoCache["$source:$url"]
+        mangaMemoCache["$source:$url"]?.let { return it }
+        val saved = prefs?.getString("mm:$source:$url", null) ?: return null
+        return runCatching { json.parseToJsonElement(saved) as? JsonObject }.getOrNull()?.also {
+            mangaMemoCache["$source:$url"] = it
+        }
     }
 
     fun putChapterMemo(source: String, url: String, memo: JsonObject?) {
         if (memo != null && memo.isNotEmpty()) {
             chapterMemoCache["$source:$url"] = memo
+            runCatching {
+                prefs?.edit()?.putString("cm:$source:$url", memo.toString())?.apply()
+            }
         }
     }
 
     fun getChapterMemo(source: String, url: String): JsonObject? {
-        return chapterMemoCache["$source:$url"]
+        chapterMemoCache["$source:$url"]?.let { return it }
+        val saved = prefs?.getString("cm:$source:$url", null) ?: return null
+        return runCatching { json.parseToJsonElement(saved) as? JsonObject }.getOrNull()?.also {
+            chapterMemoCache["$source:$url"] = it
+        }
+    }
+
+    fun putChapterMangaUrl(source: String, chapterUrl: String, mangaUrl: String) {
+        if (mangaUrl.isNotBlank()) {
+            chapterToMangaUrl["$source:$chapterUrl"] = mangaUrl
+            runCatching {
+                prefs?.edit()?.putString("c2m:$source:$chapterUrl", mangaUrl)?.apply()
+            }
+        }
+    }
+
+    fun getChapterMangaUrl(source: String, chapterUrl: String): String? {
+        chapterToMangaUrl["$source:$chapterUrl"]?.let { return it }
+        val saved = prefs?.getString("c2m:$source:$chapterUrl", null) ?: return null
+        chapterToMangaUrl["$source:$chapterUrl"] = saved
+        return saved
     }
 }

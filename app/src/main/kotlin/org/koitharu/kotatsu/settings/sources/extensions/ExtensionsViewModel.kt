@@ -29,6 +29,28 @@ import org.zeravrix.kotatsu.list.ui.model.ListModel
 import org.zeravrix.kotatsu.list.ui.model.LoadingState
 import javax.inject.Inject
 
+data class ExtensionLanguage(
+    val code: String,
+    val displayName: String,
+)
+
+fun getLanguageDisplayName(code: String): String {
+    return try {
+        val locale = java.util.Locale.forLanguageTag(code)
+        val engName = locale.getDisplayLanguage(java.util.Locale.ENGLISH).replaceFirstChar { it.uppercase() }
+        val nativeName = locale.getDisplayLanguage(locale).replaceFirstChar { it.uppercase() }
+        if (engName.isBlank()) {
+            code.uppercase()
+        } else if (nativeName.isNotBlank() && !nativeName.equals(engName, ignoreCase = true)) {
+            "$engName ($nativeName)"
+        } else {
+            engName
+        }
+    } catch (_: Throwable) {
+        code.uppercase()
+    }
+}
+
 enum class FilterTab {
     ALL,
     INSTALLED,
@@ -43,6 +65,13 @@ class ExtensionsViewModel @Inject constructor(
     val sourcesRepository: MangaSourcesRepository,
     val extensionManager: ExtensionManager,
 ) : BaseViewModel() {
+
+    companion object {
+        private val KNOWN_LANGUAGES = listOf(
+            "ar", "en", "es", "fr", "id", "it", "ja", "ko", "pt", "pt-BR",
+            "ru", "th", "tr", "vi", "zh-Hans", "de", "pl"
+        )
+    }
 
     val filterTab = MutableStateFlow(FilterTab.ALL)
     val searchQuery = MutableStateFlow("")
@@ -74,12 +103,24 @@ class ExtensionsViewModel @Inject constructor(
         available.count { it.pkgName !in installedPkgs }
     }.stateIn(viewModelScope, SharingStarted.Lazily, 0)
 
-    val availableLanguages = extensionManager.availableExtensionsFlow.combine(
+    val availableLanguages: StateFlow<List<ExtensionLanguage>> = combine(
+        extensionManager.availableExtensionsFlow,
         extensionManager.loadedExtensionsFlow,
-    ) { available, loaded ->
-        val langs = (available.map { it.lang } + loaded.map { it.lang }).filter { it.isNotBlank() && it != "all" }.toSet()
-        langs.sorted()
-    }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+        extensionManager.notLoadedExtensionsFlow,
+    ) { available, loaded, notLoaded ->
+        val foundCodes = (available.map { it.lang } + loaded.map { it.lang } + notLoaded.mapNotNull { it.lang })
+            .filter { it.isNotBlank() && !it.equals("all", ignoreCase = true) }
+            .toSet()
+
+        val allCodes = (KNOWN_LANGUAGES + foundCodes).distinct()
+        allCodes.map { code ->
+            ExtensionLanguage(code = code, displayName = getLanguageDisplayName(code))
+        }.sortedBy { it.displayName.lowercase() }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        KNOWN_LANGUAGES.map { ExtensionLanguage(it, getLanguageDisplayName(it)) }.sortedBy { it.displayName.lowercase() }
+    )
 
     val items: StateFlow<List<ListModel>> = combine(
         extensionManager.loadedExtensionsFlow,
@@ -129,8 +170,14 @@ class ExtensionsViewModel @Inject constructor(
                 }
                 if (!matchesName && !matchesPkg && !matchesSource) return false
             }
-            if (lang != null && !ext.lang.equals(lang, ignoreCase = true) && !ext.lang.equals("all", ignoreCase = true)) {
-                return false
+            if (lang != null) {
+                val extLang = ext.lang.orEmpty().lowercase()
+                val target = lang.lowercase()
+                val matches = extLang == target ||
+                    extLang == "all" ||
+                    (target == "pt" && extLang == "pt-br") ||
+                    (target == "zh-hans" && extLang.startsWith("zh"))
+                if (!matches) return false
             }
             return true
         }

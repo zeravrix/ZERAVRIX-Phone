@@ -400,7 +400,19 @@ class MangaSourcesRepository @Inject constructor(
 	suspend fun setPackagePinned(packageName: String, isPinned: Boolean) {
 		val prefix = "mihon:$packageName:"
 		db.withTransaction {
-			dao.findAll().filter { it.source.startsWith(prefix) }.forEach { dao.setPinned(it.source, isPinned) }
+			val matching = dao.findAll().filter { it.source.startsWith(prefix) }
+			if (matching.isNotEmpty()) {
+				matching.forEach { dao.setPinned(it.source, isPinned) }
+			} else {
+				val loaded = extensionManager.getLoadedExtensions().find { it.pkgName == packageName }
+				if (loaded != null && loaded.sources.isNotEmpty()) {
+					loaded.sources.forEach { src ->
+						dao.setPinned("mihon:$packageName:${src.id}", isPinned)
+					}
+				} else {
+					dao.setPinned("mihon:$packageName:0", isPinned)
+				}
+			}
 		}
 	}
 

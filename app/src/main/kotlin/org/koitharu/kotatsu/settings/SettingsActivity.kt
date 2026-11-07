@@ -94,12 +94,18 @@ class SettingsActivity :
 		pref: Preference,
 	): Boolean {
 		val fragmentName = pref.fragment ?: return false
-		openFragment(
-			fragmentClass = FragmentFactory.loadFragmentClass(classLoader, fragmentName),
-			args = pref.peekExtras(),
-			isFromRoot = caller is RootSettingsFragment,
-		)
-		return true
+		return try {
+			openFragment(
+				fragmentClass = FragmentFactory.loadFragmentClass(classLoader, fragmentName),
+				args = pref.peekExtras(),
+				isFromRoot = caller is RootSettingsFragment,
+			)
+			true
+		} catch (e: Throwable) {
+			android.util.Log.e("SettingsActivity", "Failed to start fragment $fragmentName", e)
+			android.widget.Toast.makeText(this, "Failed to open section: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+			false
+		}
 	}
 
 	fun setSectionTitle(title: CharSequence?) {

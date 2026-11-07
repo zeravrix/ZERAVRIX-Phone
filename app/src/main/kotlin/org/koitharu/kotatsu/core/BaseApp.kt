@@ -3,6 +3,7 @@ package org.zeravrix.kotatsu.core
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatDelegate
@@ -72,7 +73,16 @@ open class BaseApp : Application(), Configuration.Provider {
 			.build()
 
 	override fun onCreate() {
-				super.onCreate()
+		super.onCreate()
+		val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+		Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+			Log.e("BaseApp", "Uncaught exception on thread ${thread.name} (${thread.id})", throwable)
+			if (Looper.myLooper() != Looper.getMainLooper()) {
+				Log.w("BaseApp", "Safely caught background exception on ${thread.name}")
+				return@setDefaultUncaughtExceptionHandler
+			}
+			defaultHandler?.uncaughtException(thread, throwable)
+		}
 		PlatformRegistry.applicationContext = this // TODO replace with OkHttp.initialize
 		runCatching {
 			MihonRuntimeModule.install(this)

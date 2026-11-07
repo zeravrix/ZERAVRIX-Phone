@@ -3,7 +3,6 @@ package org.zeravrix.kotatsu.settings.about.changelog
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.jsoup.internal.StringUtil
 import org.zeravrix.kotatsu.core.github.AppUpdateRepository
 import org.zeravrix.kotatsu.core.ui.BaseViewModel
 import javax.inject.Inject
@@ -19,23 +18,27 @@ class ChangelogViewModel @Inject constructor(
 		launchLoadingJob(Dispatchers.Default) {
 			val versions = runCatching { appUpdateRepository.getAvailableVersions() }.getOrDefault(emptyList())
 			if (versions.isNotEmpty()) {
-				val stringJoiner = StringUtil.StringJoiner("\n\n\n")
-				for (version in versions) {
-					stringJoiner.add("# ")
-						.append(version.name)
-						.append("\n\n")
-						.append(version.description)
-				}
-				changelog.value = stringJoiner.complete()
+				val changelogText = buildString {
+					for (version in versions) {
+						append("# ")
+						append(version.name)
+						append("\n\n")
+						append(version.description)
+						append("\n\n\n")
+					}
+				}.trim()
+				changelog.value = changelogText
 			} else {
 				changelog.value = """
-					# ZERAVRIX Phone 2.0.0
+					# ZERAVRIX Phone 2.0.4
 					
 					### What's New:
-					- **Full Mihon / Tachiyomi Extension Architecture**: Browse, install, and execute APK extensions directly inside ZERAVRIX.
+					- **Universal Extension Architecture**: Browse, install, and execute APK extensions directly inside ZERAVRIX.
+					- **Multi-Language Support**: Full language filter and localized language names in extension store.
 					- **Direct Download & Add in Source Catalog**: Instant inline download progress and 1-tap addition to Explore.
+					- **Pinned Source Ordering**: Pin and unpin sources with instant persistence in Explore.
 					- **Native Offline Downloads**: Full support for downloading and saving manga and manhwa chapters offline.
-					- **Optimized Networking**: Complete OkHttp and Brotli decompression support for fast, seamless reading.
+					- **Optimized Networking & Caching**: Fast page loading, Brotli compression, and resilient chapter memo cache.
 					- **Content Control**: Comprehensive NSFW content toggles across all catalog and extension listings.
 					- **Explore Integration**: Unified Explore feed for all installed native and extension sources.
 					

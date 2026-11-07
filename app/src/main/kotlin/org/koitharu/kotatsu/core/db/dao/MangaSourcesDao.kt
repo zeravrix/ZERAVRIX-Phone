@@ -55,8 +55,21 @@ abstract class MangaSourcesDao {
 	@Query("UPDATE sources SET used_at = :value WHERE source = :source")
 	abstract suspend fun setLastUsed(source: String, value: Long)
 
-	@Query("UPDATE sources SET pinned = :isPinned WHERE source = :source")
-	abstract suspend fun setPinned(source: String, isPinned: Boolean)
+	@Transaction
+	open suspend fun setPinned(source: String, isPinned: Boolean) {
+		if (updateIsPinned(source, isPinned) == 0) {
+			val entity = MangaSourceEntity(
+				source = source,
+				isEnabled = true,
+				sortKey = getMaxSortKey() + 1,
+				addedIn = BuildConfig.VERSION_CODE,
+				lastUsedAt = 0,
+				isPinned = isPinned,
+				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
+			)
+			upsert(entity)
+		}
+	}
 
 	@Query("UPDATE sources SET cf_state = :state WHERE source = :source")
 	abstract suspend fun setCfState(source: String, state: Int)
@@ -111,6 +124,9 @@ abstract class MangaSourcesDao {
 
 	@Query("UPDATE sources SET enabled = :isEnabled WHERE source = :source")
 	protected abstract suspend fun updateIsEnabled(source: String, isEnabled: Boolean): Int
+
+	@Query("UPDATE sources SET pinned = :isPinned WHERE source = :source")
+	protected abstract suspend fun updateIsPinned(source: String, isPinned: Boolean): Int
 
 	@RawQuery(observedEntities = [MangaSourceEntity::class])
 	protected abstract fun observeImpl(query: SupportSQLiteQuery): Flow<List<MangaSourceEntity>>

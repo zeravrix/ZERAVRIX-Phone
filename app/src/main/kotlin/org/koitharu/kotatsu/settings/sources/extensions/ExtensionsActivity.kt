@@ -178,7 +178,7 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
 
         chips.add(
             ChipsView.ChipModel(
-                title = data.selectedLanguage?.uppercase() ?: getString(R.string.all_languages),
+                title = data.selectedLanguage?.let { getLanguageDisplayName(it) } ?: getString(R.string.all_languages),
                 isDropdown = true,
                 data = "LANG_DROPDOWN",
             ),
@@ -199,14 +199,14 @@ class ExtensionsActivity : BaseActivity<ActivityExtensionsBinding>(),
         val popup = PopupMenu(this, anchor)
         popup.menu.add(Menu.NONE, 0, 0, getString(R.string.all_languages))
         for ((idx, lang) in langs.withIndex()) {
-            popup.menu.add(Menu.NONE, idx + 1, idx + 1, lang.uppercase())
+            popup.menu.add(Menu.NONE, idx + 1, idx + 1, lang.displayName)
         }
         popup.setOnMenuItemClickListener { menuItem ->
             if (menuItem.itemId == 0) {
                 viewModel.setSelectedLanguage(null)
             } else {
                 val selected = langs.getOrNull(menuItem.itemId - 1)
-                viewModel.setSelectedLanguage(selected)
+                viewModel.setSelectedLanguage(selected?.code)
             }
             true
         }
