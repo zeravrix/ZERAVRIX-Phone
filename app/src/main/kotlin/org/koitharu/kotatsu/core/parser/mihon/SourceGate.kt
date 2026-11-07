@@ -15,8 +15,8 @@ import java.util.concurrent.ConcurrentHashMap
 object SourceGate {
 
     private const val TAG = "SourceGate"
-    private const val MAX_CONCURRENT_REQUESTS = 2
-    private const val MIN_GAP_MS = 150L
+    private const val MAX_CONCURRENT_REQUESTS = 3
+    private const val MIN_GAP_MS = 40L
     private const val MAX_RETRIES = 3
     private const val TIMEOUT_MS = 25_000L
 

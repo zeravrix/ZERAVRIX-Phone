@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class SourceGateTest {
 
     @Test
-    fun `limits concurrency to max 2 simultaneous executions`() = runBlocking {
+    fun `limits concurrency to max 3 simultaneous executions`() = runBlocking {
         val activeCount = AtomicInteger(0)
         val maxObserved = AtomicInteger(0)
         val sourceId = 9999L
@@ -31,7 +31,7 @@ class SourceGateTest {
         }
 
         jobs.awaitAll()
-        assertTrue("Max observed concurrency should be <= 2, was ${maxObserved.get()}", maxObserved.get() <= 2)
+        assertTrue("Max observed concurrency should be <= 3, was ${maxObserved.get()}", maxObserved.get() <= 3)
     }
 
     @Test

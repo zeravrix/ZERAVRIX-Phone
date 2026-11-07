@@ -223,7 +223,8 @@ class ExtensionsViewModel @Inject constructor(
             ?: ext.signatures.firstOrNull()
         if (hash != null) {
             extensionManager.trustExtension.trust(ext.pkgName, ext.versionCode, hash)
-            viewModelScope.launch {
+            // trust() notifies the manager; a single reload is enough.
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                 extensionManager.loadExtensions()
             }
         }
@@ -231,13 +232,13 @@ class ExtensionsViewModel @Inject constructor(
 
     fun uninstall(pkgName: String) {
         viewModelScope.launch {
+            // Source rows are removed by syncMihonSources once the package is really gone.
             extensionManager.uninstallExtension(pkgName)
-            sourcesRepository.deleteSourcesByPackage(pkgName)
         }
     }
 
     fun installFromUri(uri: Uri) {
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             extensionManager.installer.installFromUri(uri)
         }
     }
@@ -269,22 +270,7 @@ class ExtensionsViewModel @Inject constructor(
 
     fun toggleExtensionPin(pkgName: String, pin: Boolean) {
         launchJob(kotlinx.coroutines.Dispatchers.IO) {
-            val loadedSources = extensionManager.loadedExtensionsFlow.value
-                .find { it.pkgName == pkgName }
-                ?.sources
-                ?.map { MihonMangaSource(pkgName, it.id, it.name, it.lang) }
-                .orEmpty()
-            if (loadedSources.isNotEmpty()) {
-                sourcesRepository.setIsPinned(loadedSources, pin)
-            } else {
-                val enabled = sourcesRepository.getEnabledSources()
-                    .filterIsInstance<MihonMangaSource>()
-                    .filter { it.packageName == pkgName }
-                if (enabled.isNotEmpty()) {
-                    sourcesRepository.setIsPinned(enabled, pin)
-                }
-            }
-            sourcesRepository.setExtensionPackagePinned(pkgName, pin)
+            sourcesRepository.setPackagePinned(pkgName, pin)
         }
     }
 }

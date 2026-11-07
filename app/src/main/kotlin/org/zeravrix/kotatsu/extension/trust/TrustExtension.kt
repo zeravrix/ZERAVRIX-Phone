@@ -37,8 +37,6 @@ class TrustExtension @Inject constructor(
         if (fingerprints.any { fp -> storeKeys.any { it.equals(fp, ignoreCase = true) } }) return true
 
         val trusted = prefs.getStringSet(KEY_TRUSTED, emptySet()) ?: emptySet()
-        if (pkgInfo.packageName in trusted) return true
-
         val versionCode = PackageInfoCompat.getLongVersionCode(pkgInfo)
         val key = "${pkgInfo.packageName}:$versionCode:${fingerprints.last()}"
         val legacyKey = "${pkgInfo.packageName}:${fingerprints.last()}"
@@ -48,8 +46,8 @@ class TrustExtension @Inject constructor(
             legacyKey in trusted ||
             zeroKey in trusted ||
             trusted.any { entry ->
-                entry == pkgInfo.packageName ||
-                (entry.startsWith("${pkgInfo.packageName}:") && fingerprints.any { fp -> entry.endsWith(":$fp", ignoreCase = true) })
+                entry.startsWith("${pkgInfo.packageName}:") &&
+                    fingerprints.any { fp -> entry.endsWith(":$fp", ignoreCase = true) }
             }
     }
 
@@ -59,7 +57,6 @@ class TrustExtension @Inject constructor(
         current.add("$pkgName:$versionCode:$signatureHash")
         current.add("$pkgName:$signatureHash")
         current.add("$pkgName:0:$signatureHash")
-        current.add(pkgName)
         prefs.edit().putStringSet(KEY_TRUSTED, current).apply()
         _changes.value += 1
     }
@@ -83,7 +80,7 @@ class TrustExtension @Inject constructor(
     companion object {
         const val KEY_TRUSTED = "trusted_signatures"
 
-        // Bundled and well-known extension certificate hashes (Keiyoushi, Tachiyomi, ZERAVRIX)
+        // Well-known extension certificate hashes. Unverified against upstream here: confirm before release.
         val pinnedCertificates: Set<String> = setOf(
             "777e090299f01540cb7e7ce7ab536967da510c4d293d207ec25b292e31379435", // Keiyoushi
             "8434771465e9b7a42ec3e8876c0e7687cf18ff7ab09c4d9b4b0e5ee0d984cfb7", // Official Tachiyomi

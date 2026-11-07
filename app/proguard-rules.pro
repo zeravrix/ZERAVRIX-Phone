@@ -22,8 +22,6 @@
 
 # Optional Mihon network diagnostics/localization classes not required by the minimal host graph.
 -dontwarn dev.icerock.moko.resources.**
--dontwarn logcat.**
--dontwarn okhttp3.logging.**
 -dontwarn tachiyomi.i18n.**
 
 # Public ABI consumed by separately compiled Mihon extension APKs.
@@ -66,16 +64,15 @@
 -dontwarn org.brotli.dec.**
 -keep class org.brotli.dec.** { *; }
 -keep class okio.** { *; }
+-keep class app.cash.quickjs.** { *; }
+-keep class com.hippo.unifile.** { *; }
+-keep class logcat.** { *; }
 -keep interface okio.** { *; }
 -keep class rx.** { *; }
 -keep interface rx.** { *; }
 -keep class androidx.preference.** { *; }
 -keep interface androidx.preference.** { *; }
 
-# Optional Mihon JavaScript/serialization integrations not packaged by the minimal host.
--dontwarn app.cash.quickjs.**
--dontwarn kotlinx.serialization.json.okio.**
--dontwarn com.hippo.unifile.UniFile
 -dontwarn net.greypanther.natsort.CaseInsensitiveSimpleNaturalComparator
 -dontwarn tachiyomi.decoder.**
 -dontwarn nucleus.view.NucleusActionBarActivity

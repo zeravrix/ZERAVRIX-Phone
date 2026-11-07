@@ -91,28 +91,6 @@ class MihonMangaRepository(
             }
 
             val allFetched = ArrayList(result.mangas)
-            // Ensure first page loads enough items to fill modern vertical screens
-            if (offset == 0 && allFetched.size in 1..15 && result.hasNextPage) {
-                runCatching {
-                    withTimeoutOrNull(4000L) {
-                        val page2 = SourceGate.execute(effectiveSourceId) {
-                            when {
-                                query.isNotBlank() -> loaded.source.getSearchManga(2, query, FilterList())
-                                isLatest && supportsLatest -> {
-                                    try {
-                                        loaded.source.getLatestUpdates(2)
-                                    } catch (_: UnsupportedOperationException) {
-                                        loaded.source.getPopularManga(2)
-                                    }
-                                }
-                                else -> loaded.source.getPopularManga(2)
-                            }
-                        }
-                        allFetched.addAll(page2.mangas)
-                        lastPage = 2
-                    }
-                }
-            }
 
             val mangas = allFetched.map { it.toKotatsuManga(emptyList(), httpSource) }
             when (effectiveOrder) {
@@ -127,33 +105,41 @@ class MihonMangaRepository(
         val effectiveSourceId = loaded.descriptor.sourceId
         val httpSource = loaded.source as? HttpSource
 
-        val update = SourceGate.execute(effectiveSourceId) {
+        val update = guarded("details") { SourceGate.execute(effectiveSourceId) {
             loaded.source.getMangaUpdate(
                 manga.toSManga(),
                 manga.chapters.orEmpty().map { it.toSChapter() },
                 fetchDetails = true,
                 fetchChapters = true,
             )
-        }
+        } }
 
-        val chapters = update.chapters.orEmpty().map { it.toKotatsuChapter() }
+        val chapters = update.chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
 
-        update.manga.toKotatsuManga(chapters, httpSource).copy(id = manga.id, source = loaded.descriptor)
+        update.manga.toKotatsuManga(
+            chapters = chapters,
+            httpSource = httpSource,
+            fallbackUrl = manga.url,
+            fallbackTitle = manga.title,
+            fallbackCover = manga.coverUrl,
+        ).copy(id = manga.id, source = loaded.descriptor)
     }
 
     override suspend fun getPagesImpl(chapter: MangaChapter): List<MangaPage> = withContext(Dispatchers.IO) {
         val loaded = MihonSourceRuntime.getLoadedOrAwait(context, source)
         val effectiveSourceId = loaded.descriptor.sourceId
 
-        val mihonPages = SourceGate.execute(effectiveSourceId) {
+        val mihonPages = guarded("pages") { SourceGate.execute(effectiveSourceId) {
             loaded.source.getPageList(chapter.toSChapter())
-        }
+        } }
 
-        mihonPages.map { page ->
+        mihonPages.mapIndexed { i, page ->
+            val pageUrl = page.url
+            val imageUrl = page.imageUrl.orEmpty()
             MangaPage(
-                id = stableId(loaded.descriptor.name, "page:${page.index}:${page.url}"),
-                url = page.url,
-                preview = page.imageUrl.orEmpty(),
+                id = stableId(loaded.descriptor.name, "page:$i:$pageUrl:$imageUrl"),
+                url = pageUrl.ifBlank { imageUrl },
+                preview = imageUrl,
                 source = loaded.descriptor,
             )
         }
@@ -182,13 +168,38 @@ class MihonMangaRepository(
         }
     }
 
+    /**
+     * Extensions may leave lateinit SManga/SChapter fields unset. Mihon surfaces that as an
+     * error naming the source; do the same instead of showing a bare "lateinit property" text.
+     */
+    private inline fun <T> guarded(operation: String, block: () -> T): T = try {
+        block()
+    } catch (e: UninitializedPropertyAccessException) {
+        throw IllegalStateException(
+            "${source.name}: the extension returned incomplete data ($operation): ${e.message}. " +
+                "Try updating the extension.",
+            e,
+        )
+    }
+
     override suspend fun getRelatedMangaImpl(seed: Manga): List<Manga> = emptyList()
 
     private fun resolveUrl(baseUrl: String, value: String): String =
         runCatching { java.net.URI(baseUrl.trimEnd('/') + "/").resolve(value).toString() }
             .getOrDefault(value)
 
-    private fun SManga.toKotatsuManga(chapters: List<MangaChapter>, httpSource: HttpSource? = null): Manga {
+    // Mihon extensions are allowed to leave SManga.url / SManga.title unset in detail responses
+    // (they are lateinit). Mihon itself guards against UninitializedPropertyAccessException.
+    private fun SManga.toKotatsuManga(
+        chapters: List<MangaChapter>,
+        httpSource: HttpSource? = null,
+        fallbackUrl: String = "",
+        fallbackTitle: String = "",
+        fallbackCover: String? = null,
+    ): Manga {
+        val url = runCatching { this.url }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallbackUrl
+        val title = runCatching { this.title }.getOrNull()?.takeIf { it.isNotBlank() } ?: fallbackTitle
+        val thumbnail_url = this.thumbnail_url?.takeIf { it.isNotBlank() } ?: fallbackCover
         val resolvedCover = thumbnail_url?.takeIf { it.isNotBlank() }?.let { raw ->
             if (raw.startsWith("http://") || raw.startsWith("https://")) raw
             else if (httpSource != null) resolveUrl(httpSource.baseUrl, raw)
@@ -221,8 +232,8 @@ class MihonMangaRepository(
     }
 
     private fun SMangaUpdate.toKotatsuManga(previous: Manga, httpSource: HttpSource? = null): Manga {
-        val updatedChapters = chapters.orEmpty().map { it.toKotatsuChapter() }
-        val updated = manga.toKotatsuManga(updatedChapters, httpSource)
+        val updatedChapters = chapters.orEmpty().mapNotNull { runCatching { it.toKotatsuChapter() }.getOrNull() }
+        val updated = manga.toKotatsuManga(updatedChapters, httpSource, previous.url, previous.title, previous.coverUrl)
         return updated.copy(
             id = previous.id,
             source = source,
@@ -233,7 +244,7 @@ class MihonMangaRepository(
 
     private fun SChapter.toKotatsuChapter(): MangaChapter = MangaChapter(
         id = stableId(source.name, "chapter:$url"),
-        title = name.trim().removePrefix("#").trim().ifBlank { "Chapter ${chapter_number.takeIf { it > 0 } ?: ""}" }.trim(),
+        title = runCatching { name }.getOrDefault("").trim().removePrefix("#").trim().ifBlank { "Chapter ${chapter_number.takeIf { it > 0 } ?: ""}" }.trim(),
         number = chapter_number,
         volume = 0,
         url = url,

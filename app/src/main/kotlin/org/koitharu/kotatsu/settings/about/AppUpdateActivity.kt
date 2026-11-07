@@ -52,7 +52,7 @@ class AppUpdateActivity : BaseActivity<ActivityAppUpdateBinding>(), View.OnClick
 		if (it) {
 			viewModel.startDownload()
 		} else {
-			openInBrowser()
+			Snackbar.make(viewBinding.scrollView, R.string.operation_not_supported, Snackbar.LENGTH_SHORT).show()
 		}
 	}
 
@@ -61,6 +61,16 @@ class AppUpdateActivity : BaseActivity<ActivityAppUpdateBinding>(), View.OnClick
 		setContentView(ActivityAppUpdateBinding.inflate(layoutInflater))
 		downloadReceiver = UpdateDownloadReceiver(viewModel)
 		viewModel.nextVersion.observe(this, ::onNextVersionChanged)
+		viewModel.checkFinished.observe(this) { finished ->
+			if (finished && viewModel.nextVersion.value == null) {
+				val error = viewModel.checkError.value
+				if (error != null) {
+					viewBinding.textViewContent.text = error.getDisplayMessage(resources)
+				} else {
+					viewBinding.textViewContent.setText(R.string.no_update_found)
+				}
+			}
+		}
 		viewBinding.buttonCancel.setOnClickListener(this)
 		viewBinding.buttonUpdate.setOnClickListener(this)
 
@@ -116,7 +126,14 @@ class AppUpdateActivity : BaseActivity<ActivityAppUpdateBinding>(), View.OnClick
 	private suspend fun onNextVersionChanged(version: AppVersion?) {
 		viewBinding.buttonUpdate.isEnabled = version != null && !viewModel.isLoading.value
 		if (version == null) {
-			viewBinding.textViewContent.setText(R.string.loading_)
+			val error = viewModel.checkError.value
+			if (viewModel.checkFinished.value && error != null) {
+				viewBinding.textViewContent.text = error.getDisplayMessage(resources)
+			} else {
+				viewBinding.textViewContent.setText(
+					if (viewModel.checkFinished.value) R.string.no_update_found else R.string.loading_,
+				)
+			}
 			return
 		}
 		val markwon = Markwon.create(this)
@@ -125,9 +142,13 @@ class AppUpdateActivity : BaseActivity<ActivityAppUpdateBinding>(), View.OnClick
 				append(getString(R.string.new_version_s, version.name))
 				appendLine()
 				append(getString(R.string.size_s, FileSize.BYTES.format(this@AppUpdateActivity, version.apkSize)))
-				appendLine()
-				appendLine()
-				append(markwon.toMarkdown(version.description))
+				if (version.description.isNotBlank()) {
+					appendLine()
+					appendLine()
+					append(getString(R.string.whats_new))
+					appendLine()
+					append(markwon.toMarkdown(version.description))
+				}
 			}
 		}
 		markwon.setParsedMarkdown(viewBinding.textViewContent, message)
@@ -142,17 +163,24 @@ class AppUpdateActivity : BaseActivity<ActivityAppUpdateBinding>(), View.OnClick
 			}
 			return
 		}
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+			// Let the user allow installs from ZERAVRIX first; they tap Update again afterwards.
+			try {
+				startActivity(
+					Intent(
+						android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+						android.net.Uri.parse("package:$packageName"),
+					),
+				)
+			} catch (e: Exception) {
+				onError(e)
+			}
+			return
+		}
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
 			permissionRequest.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
 		} else {
 			viewModel.startDownload()
-		}
-	}
-
-	private fun openInBrowser() {
-		val latestVersion = viewModel.nextVersion.value ?: return
-		if (!router.openExternalBrowser(latestVersion.url, getString(R.string.open_in_browser))) {
-			Snackbar.make(viewBinding.scrollView, R.string.operation_not_supported, Snackbar.LENGTH_SHORT).show()
 		}
 	}
 

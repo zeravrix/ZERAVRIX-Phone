@@ -88,7 +88,6 @@ class MangaSourcesRepository @Inject constructor(
 				packagePreferences[pkg] = Pair(isEnabled, isPinned)
 			}
 		}
-		dao.deleteDummySources()
 		val descriptors = ArrayList<MihonMangaSource>()
 
 		for (ext in loaded) {
@@ -397,9 +396,12 @@ class MangaSourcesRepository @Inject constructor(
 		}
 	}
 
-	suspend fun setExtensionPackagePinned(packageName: String, isPinned: Boolean) {
-		dao.deleteDummySources()
-		dao.setPinnedForPackage(packageName, isPinned)
+	/** Pins or unpins every source row of one extension. Used only by the Extensions screen. */
+	suspend fun setPackagePinned(packageName: String, isPinned: Boolean) {
+		val prefix = "mihon:$packageName:"
+		db.withTransaction {
+			dao.findAll().filter { it.source.startsWith(prefix) }.forEach { dao.setPinned(it.source, isPinned) }
+		}
 	}
 
 	suspend fun trackUsage(source: MangaSource) {

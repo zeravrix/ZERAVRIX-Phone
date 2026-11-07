@@ -29,7 +29,10 @@ class AppUpdateViewModel @Inject constructor(
 	val nextVersion = repository.observeAvailableUpdate()
 	val downloadProgress = MutableStateFlow(-1f)
 	val downloadState = MutableStateFlow(DownloadManager.STATUS_PENDING)
+	val checkFinished = MutableStateFlow(false)
 	val installIntent = MutableStateFlow<Intent?>(null)
+	val checkError = MutableStateFlow<Throwable?>(null)
+	@Volatile private var currentDownloadId = -1L
 	val onDownloadDone = MutableEventFlow<Intent>()
 
 	private val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
@@ -39,6 +42,8 @@ class AppUpdateViewModel @Inject constructor(
 		if (nextVersion.value == null) {
 			launchLoadingJob(Dispatchers.Default) {
 				repository.fetchUpdate()
+				checkError.value = repository.lastCheckError
+				checkFinished.value = true
 			}
 		}
 	}
@@ -53,6 +58,7 @@ class AppUpdateViewModel @Inject constructor(
 				.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
 				.setMimeType("application/vnd.android.package-archive")
 			val downloadId = downloadManager.enqueue(request)
+			currentDownloadId = downloadId
 			observeDownload(downloadId)
 		}
 	}
@@ -60,7 +66,7 @@ class AppUpdateViewModel @Inject constructor(
 	fun onDownloadComplete(intent: Intent) {
 		launchLoadingJob(Dispatchers.Default) {
 			val downloadId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, 0L)
-			if (downloadId == 0L) {
+			if (downloadId == 0L || downloadId != currentDownloadId) {
 				return@launchLoadingJob
 			}
 			@Suppress("DEPRECATION")
@@ -88,7 +94,7 @@ class AppUpdateViewModel @Inject constructor(
 					val bytesTotal = cursor.getLong(
 						cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES),
 					)
-					downloadProgress.value = bytesDownloaded.toFloat() / bytesTotal
+					downloadProgress.value = if (bytesTotal > 0) bytesDownloaded.toFloat() / bytesTotal else -1f
 					val state = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
 					downloadState.value = state
 					if (state == DownloadManager.STATUS_SUCCESSFUL || state == DownloadManager.STATUS_FAILED) {

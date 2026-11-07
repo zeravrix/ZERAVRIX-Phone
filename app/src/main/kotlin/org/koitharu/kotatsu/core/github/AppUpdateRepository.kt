@@ -50,11 +50,22 @@ class AppUpdateRepository @Inject constructor(
 		val request = Request.Builder()
 			.get()
 			.url(releasesUrl)
+			.header("Accept", "application/vnd.github+json")
 		val jsonArray = okHttp.newCall(request.build()).await().parseJsonArray()
 		return jsonArray.mapJSONNotNull { json ->
-			val asset = json.optJSONArray("assets")?.find { jo ->
-				jo.optString("content_type") == CONTENT_TYPE_APK || jo.optString("name").endsWith(".apk", ignoreCase = true)
-			} ?: return@mapJSONNotNull null
+			if (json.optBoolean("draft")) return@mapJSONNotNull null
+			val assets = json.optJSONArray("assets") ?: return@mapJSONNotNull null
+			val apks = ArrayList<JSONObject>()
+			for (i in 0 until assets.length()) {
+				val jo = assets.getJSONObject(i)
+				if (jo.optString("content_type") == CONTENT_TYPE_APK || jo.optString("name").endsWith(".apk", ignoreCase = true)) {
+					apks += jo
+				}
+			}
+			// Prefer a non-debug APK when a release has several.
+			val asset = apks.firstOrNull { !it.optString("name").contains("debug", ignoreCase = true) }
+				?: apks.firstOrNull()
+				?: return@mapJSONNotNull null
 			val tagName = json.optString("tag_name").removePrefix("v").trim()
 			val versionName = if (tagName.isNotBlank()) tagName else json.getString("name").removePrefix("v").trim()
 			AppVersion(
@@ -63,10 +74,15 @@ class AppUpdateRepository @Inject constructor(
 				name = versionName,
 				apkSize = asset.getLong("size"),
 				apkUrl = asset.getString("browser_download_url"),
-				description = json.optString("body"),
+				description = sanitizeNotes(json.optString("body")),
 			)
 		}
 	}
+
+	/** Last error of the most recent update check, or null if it succeeded. */
+	@Volatile
+	var lastCheckError: Throwable? = null
+		private set
 
 	suspend fun fetchUpdate(): AppVersion? = withContext(Dispatchers.Default) {
 		if (!isUpdateSupported()) {
@@ -82,14 +98,37 @@ class AppUpdateRepository @Inject constructor(
 			available.maxByOrNull { it.versionId }
 				?.takeIf { it.versionId > currentVersion }
 		}.onFailure {
+			lastCheckError = it
 			it.printStackTraceDebug()
 		}.onSuccess {
+			lastCheckError = null
 			availableUpdate.value = it
 		}.getOrNull()
 	}
 
 	suspend fun isUpdateSupported(): Boolean {
 		return true
+	}
+
+	/**
+	 * Release notes are shown to the user as plain "what's new": links, bare URLs and
+	 * auto-generated "Full Changelog" lines are removed so no repository addresses are displayed.
+	 */
+	private fun sanitizeNotes(raw: String): String {
+		return raw.lineSequence()
+			.filterNot { it.contains("Full Changelog", ignoreCase = true) || it.contains("/compare/") }
+			.map { line ->
+				line
+					.replace(Regex("!\\[[^\\]]*]\\([^)]*\\)"), "")
+					.replace(Regex("\\[([^\\]]*)]\\([^)]*\\)"), "$1")
+					.replace(Regex("https?://\\S+"), "")
+					.replace(Regex("\\s+by\\s+@\\S+(\\s+in)?\\s*$"), "")
+					.replace(Regex("^#{1,6}\\s*"), "")
+					.trimEnd()
+			}
+			.joinToString("\n")
+			.replace(Regex("\n{3,}"), "\n\n")
+			.trim()
 	}
 
 	private inline fun JSONArray.find(predicate: (JSONObject) -> Boolean): JSONObject? {

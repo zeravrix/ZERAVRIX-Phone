@@ -122,17 +122,14 @@ class ExtensionInstaller(
                 // Verify signature against store key or trusted keys
                 val signatures = ExtensionLoader.getSignatures(packageInfo).orEmpty()
                 val storeKey = extension.store.signingKey
-                val isStoreSignatureValid = storeKey.isNotBlank() && storeKey != "NO_SIGNING_KEY" &&
-                    signatures.any { it.equals(storeKey, ignoreCase = true) }
-                val isPinnedTrusted = TrustExtension.pinnedCertificates.any { pinned ->
-                    signatures.any { it.equals(pinned, ignoreCase = true) }
-                }
-                val isAlreadyTrusted = TrustExtension(context).isTrusted(packageInfo, signatures, listOf(extension.store))
-
-                if (!isStoreSignatureValid && !isPinnedTrusted && !isAlreadyTrusted) {
+                val hasStoreKey = storeKey.isNotBlank() && storeKey != "NO_SIGNING_KEY"
+                if (hasStoreKey && signatures.none { it.equals(storeKey, ignoreCase = true) }) {
+                    // Store publishes a key and the APK does not match it: refuse.
                     tmpFile.delete()
-                    throw SecurityException("Extension signature is untrusted or does not match store key for ${extension.store.name}")
+                    throw SecurityException("APK signature does not match the key published by ${extension.store.name}")
                 }
+                // Stores without a key (or unknown keys) install fine: the extension is then
+                // listed as "Untrusted" and the user decides in the trust dialog, like Mihon.
 
                 stepFlow.value = InstallStep.Installing
 
@@ -144,6 +141,7 @@ class ExtensionInstaller(
                     throw e
                 }
                 Log.e(TAG, "Failed to download and install $pkgName", e)
+                showError(e.message ?: e.javaClass.simpleName)
                 stepFlow.value = InstallStep.Error
             } finally {
                 if (tmpFile.exists()) {
@@ -257,7 +255,14 @@ class ExtensionInstaller(
         } catch (e: Exception) {
             Log.w(TAG, "Error checking or uninstalling system package $pkgName", e)
         }
-        ExtensionInstallReceiver.notifyRemoved(context, pkgName)
+        // Do not notify removal here: the system uninstall dialog may be cancelled.
+        // The package-removed broadcast updates the list when it is really gone.
+    }
+
+    private fun showError(message: String) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            Toast.makeText(context, "Install failed: $message", Toast.LENGTH_LONG).show()
+        }
     }
 
     fun cancelInstall(pkgName: String) {

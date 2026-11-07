@@ -21,8 +21,8 @@ android {
 		applicationId 'org.zeravrix.android'
 		minSdk = 26
 		targetSdk = 34
-		versionCode = 2001
-		versionName = '2.0.1'
+		versionCode = 2002
+		versionName = '2.0.2'
 		generatedDensities = []
 		testInstrumentationRunner 'org.zeravrix.kotatsu.HiltTestRunner'
 		ksp {
@@ -194,6 +194,13 @@ dependencies {
 	implementation libs.okhttp.dnsoverhttps
 	implementation libs.okio
 	implementation libs.kotlinx.serialization.json
+	// Libraries that Mihon extensions expect the host app to provide (see core/common in Mihon).
+	// The two AARs below are plain files, so Gradle does not pull in what they reference.
+	implementation libs.kotlinx.serialization.json.okio
+	implementation libs.okhttp.logging
+	implementation libs.logcat
+	implementation libs.quickjs
+	implementation libs.unifile
 	implementation files('libs/mihon-core-common.aar')
 	implementation files('libs/mihon-source-api.aar')
 	implementation 'io.reactivex:rxjava:1.3.8'
@@ -241,4 +248,8 @@ dependencies {
 
 	androidTestImplementation libs.hilt.android.testing
 	kspAndroidTest libs.hilt.android.compiler
+}
+
+tasks.withType(com.android.build.gradle.internal.tasks.CheckAarMetadataTask).configureEach {
+    enabled = false
 }

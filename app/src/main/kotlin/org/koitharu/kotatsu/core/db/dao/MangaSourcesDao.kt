@@ -49,86 +49,14 @@ abstract class MangaSourcesDao {
 	@Query("UPDATE sources SET enabled = 0")
 	abstract suspend fun disableAllSources()
 
-	@Query("UPDATE sources SET enabled = 1")
-	abstract suspend fun enableAllSources()
-
 	@Query("UPDATE sources SET sort_key = :sortKey WHERE source = :source")
 	abstract suspend fun setSortKey(source: String, sortKey: Int)
 
 	@Query("UPDATE sources SET used_at = :value WHERE source = :source")
 	abstract suspend fun setLastUsed(source: String, value: Long)
 
-	@Query("DELETE FROM sources WHERE source LIKE 'mihon:%:0'")
-	abstract suspend fun deleteDummySources()
-
-	@Query("UPDATE sources SET pinned = :isPinned WHERE source LIKE 'mihon:' || :packageName || ':%'")
-	protected abstract suspend fun updatePinnedForPackage(packageName: String, isPinned: Boolean): Int
-
-	@Transaction
-	open suspend fun setPinnedForPackage(packageName: String, isPinned: Boolean): Int {
-		val count = updatePinnedForPackage(packageName, isPinned)
-		if (count == 0) {
-			val entity = MangaSourceEntity(
-				source = "mihon:$packageName:0",
-				isEnabled = true,
-				sortKey = getMaxSortKey() + 1,
-				addedIn = BuildConfig.VERSION_CODE,
-				lastUsedAt = 0,
-				isPinned = isPinned,
-				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
-			)
-			upsert(entity)
-		}
-		return count
-	}
-
-	@Query("UPDATE sources SET enabled = :isEnabled WHERE source LIKE 'mihon:' || :packageName || ':%'")
-	protected abstract suspend fun updateEnabledForPackage(packageName: String, isEnabled: Boolean): Int
-
-	@Transaction
-	open suspend fun setEnabledForPackage(packageName: String, isEnabled: Boolean): Int {
-		val count = updateEnabledForPackage(packageName, isEnabled)
-		if (count == 0) {
-			val entity = MangaSourceEntity(
-				source = "mihon:$packageName:0",
-				isEnabled = isEnabled,
-				sortKey = getMaxSortKey() + 1,
-				addedIn = BuildConfig.VERSION_CODE,
-				lastUsedAt = 0,
-				isPinned = false,
-				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
-			)
-			upsert(entity)
-		}
-		return count
-	}
-
 	@Query("UPDATE sources SET pinned = :isPinned WHERE source = :source")
-	protected abstract suspend fun updateIsPinned(source: String, isPinned: Boolean): Int
-
-	@Transaction
-	open suspend fun setPinned(source: String, isPinned: Boolean) {
-		deleteDummySources()
-		if (source.startsWith("mihon:")) {
-			val parts = source.removePrefix("mihon:").split(':', limit = 2)
-			if (parts.isNotEmpty()) {
-				val pkg = parts[0]
-				setPinnedForPackage(pkg, isPinned)
-			}
-		}
-		if (updateIsPinned(source, isPinned) == 0) {
-			val entity = MangaSourceEntity(
-				source = source,
-				isEnabled = true,
-				sortKey = getMaxSortKey() + 1,
-				addedIn = BuildConfig.VERSION_CODE,
-				lastUsedAt = 0,
-				isPinned = isPinned,
-				cfState = CloudFlareHelper.PROTECTION_NOT_DETECTED,
-			)
-			upsert(entity)
-		}
-	}
+	abstract suspend fun setPinned(source: String, isPinned: Boolean)
 
 	@Query("UPDATE sources SET cf_state = :state WHERE source = :source")
 	abstract suspend fun setCfState(source: String, state: Int)
@@ -154,13 +82,6 @@ abstract class MangaSourcesDao {
 
 	@Transaction
 	open suspend fun setEnabled(source: String, isEnabled: Boolean) {
-		if (source.startsWith("mihon:")) {
-			val parts = source.removePrefix("mihon:").split(':', limit = 2)
-			if (parts.isNotEmpty()) {
-				val pkg = parts[0]
-				setEnabledForPackage(pkg, isEnabled)
-			}
-		}
 		if (updateIsEnabled(source, isEnabled) == 0) {
 			val entity = MangaSourceEntity(
 				source = source,
